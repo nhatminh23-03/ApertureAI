@@ -135,24 +135,24 @@ export default function Editor() {
               <ResizablePanel defaultSize={50} minSize={30}>
                 <div className="relative h-full w-full">
                   <div className="absolute top-4 left-4 px-3 py-1 bg-black/60 text-white text-xs rounded-full backdrop-blur-md z-10">Original</div>
-                  <img src={edit.imageUrl} className="w-full h-full object-contain bg-black/90" alt="Original" />
+                  <img src={edit.imageUrl} className="w-full h-full object-contain bg-black/90 max-h-[80vh]" alt="Original" />
                 </div>
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel defaultSize={50} minSize={30}>
-                 <div className="relative h-full w-full">
+                 <div className="relative h-full w-full flex items-center justify-center bg-black/90">
                   <div className="absolute top-4 right-4 px-3 py-1 bg-primary/90 text-white text-xs rounded-full backdrop-blur-md z-10">Edited</div>
                   <img 
                     src={edit.imageUrl} 
-                    className="w-full h-full object-contain bg-black/90 filter contrast-125 saturate-125 brightness-110" 
+                    className="w-full h-full object-contain filter contrast-125 saturate-125 brightness-110 max-h-[80vh]" 
                     alt="Edited" 
                   />
                 </div>
               </ResizablePanel>
             </ResizablePanelGroup>
           ) : (
-            <div className="h-full w-full relative">
-              <img src={edit.imageUrl} className="w-full h-full object-contain bg-black/90" alt="Preview" />
+            <div className="h-full w-full relative flex items-center justify-center bg-black/90">
+              <img src={edit.imageUrl} className="w-full h-full object-contain max-h-[80vh]" alt="Preview" />
             </div>
           )}
         </div>

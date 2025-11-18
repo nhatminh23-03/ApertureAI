@@ -12,7 +12,10 @@ import { useQuery } from "@tanstack/react-query";
 import type { Edit } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
+import { useLocation } from "wouter";
+
 export default function History() {
+  const [, setLocation] = useLocation();
   const { data: edits, isLoading } = useQuery<Edit[]>({
     queryKey: ["/api/history"]
   });
@@ -44,14 +47,18 @@ export default function History() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {edits?.map((item) => (
-              <GlassCard key={item.id} className="p-0 overflow-hidden group flex flex-col h-full">
+              <GlassCard 
+                key={item.id} 
+                className="p-0 overflow-hidden group flex flex-col h-full cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                onClick={() => setLocation(`/editor?id=${item.id}`)}
+              >
                 <div className="aspect-[4/3] relative overflow-hidden bg-black/5">
                   <img 
                     src={item.imageUrl} 
                     alt={item.prompt}
                     className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${item.status === 'completed' ? 'filter contrast-125 saturate-125 brightness-110' : ''}`}
                   />
-                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                      <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-white/90 backdrop-blur-sm">
