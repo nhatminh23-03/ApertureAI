@@ -5,25 +5,79 @@ import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { SUGGESTION_CHIPS } from "@/lib/mock-data";
-import { ArrowLeft, Check, Download, Loader2, RefreshCw, SlidersHorizontal, Undo2, Wand2 } from "lucide-react";
+import { ArrowLeft, Check, Download, Loader2, RefreshCw, Undo2, Wand2 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import stockImage from '@assets/stock_images/scenic_landscape_pho_0c147bc2.jpg';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import type { Edit } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Editor() {
+  const [location] = useLocation();
+  const search = new URLSearchParams(window.location.search);
+  const id = search.get("id");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const [step, setStep] = useState<"prompt" | "processing" | "preview">("prompt");
   const [prompt, setPrompt] = useState("");
   const [intensity, setIntensity] = useState([50]);
 
-  // Simulate processing
-  const handleGenerate = () => {
-    if (!prompt) return;
-    setStep("processing");
-    setTimeout(() => {
+  const { data: edit, isLoading } = useQuery<Edit>({
+    queryKey: [`/api/edits/${id}`],
+    enabled: !!id
+  });
+
+  useEffect(() => {
+    if (edit?.status === "completed") {
       setStep("preview");
-    }, 2500);
-  };
+      setPrompt(edit.prompt);
+    }
+  }, [edit]);
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/generate/${id}`, { prompt });
+    },
+    onSuccess: () => {
+      setStep("processing");
+      // Poll for completion or just wait for the mock timeout
+      setTimeout(() => {
+         queryClient.invalidateQueries({ queryKey: [`/api/edits/${id}`] });
+         setStep("preview");
+      }, 2500);
+    },
+    onError: () => {
+       toast({
+         title: "Generation failed",
+         description: "Something went wrong. Please try again.",
+         variant: "destructive"
+       });
+    }
+  });
+
+  if (isLoading) {
+    return (
+      <Layout fullWidth className="h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </Layout>
+    );
+  }
+
+  if (!edit) {
+    return (
+      <Layout>
+        <div className="text-center pt-20">
+          <h1 className="text-2xl font-bold">Image not found</h1>
+          <Link href="/">
+            <a className="text-primary hover:underline mt-4 inline-block">Go Home</a>
+          </Link>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout fullWidth className="h-[calc(100vh-6rem)] flex flex-col">
@@ -43,14 +97,16 @@ export default function Editor() {
                <Undo2 className="w-4 h-4" />
                Undo
              </Button>
-             <Button variant="outline" size="sm" className="gap-2 rounded-full">
+             <Button variant="outline" size="sm" className="gap-2 rounded-full" onClick={() => generateMutation.mutate()}>
                <RefreshCw className="w-4 h-4" />
                Regenerate
              </Button>
-             <Button size="sm" className="gap-2 rounded-full bg-gradient-primary border-0 shadow-lg shadow-primary/20">
-               <Check className="w-4 h-4" />
-               Accept
-             </Button>
+             <Link href="/history">
+               <Button size="sm" className="gap-2 rounded-full bg-gradient-primary border-0 shadow-lg shadow-primary/20">
+                 <Check className="w-4 h-4" />
+                 Save & Finish
+               </Button>
+             </Link>
            </div>
         )}
       </div>
@@ -79,7 +135,7 @@ export default function Editor() {
               <ResizablePanel defaultSize={50} minSize={30}>
                 <div className="relative h-full w-full">
                   <div className="absolute top-4 left-4 px-3 py-1 bg-black/60 text-white text-xs rounded-full backdrop-blur-md z-10">Original</div>
-                  <img src={stockImage} className="w-full h-full object-cover" alt="Original" />
+                  <img src={edit.imageUrl} className="w-full h-full object-contain bg-black/90" alt="Original" />
                 </div>
               </ResizablePanel>
               <ResizableHandle withHandle />
@@ -87,8 +143,8 @@ export default function Editor() {
                  <div className="relative h-full w-full">
                   <div className="absolute top-4 right-4 px-3 py-1 bg-primary/90 text-white text-xs rounded-full backdrop-blur-md z-10">Edited</div>
                   <img 
-                    src={stockImage} 
-                    className="w-full h-full object-cover filter contrast-125 saturate-125 brightness-110" 
+                    src={edit.imageUrl} 
+                    className="w-full h-full object-contain bg-black/90 filter contrast-125 saturate-125 brightness-110" 
                     alt="Edited" 
                   />
                 </div>
@@ -96,7 +152,7 @@ export default function Editor() {
             </ResizablePanelGroup>
           ) : (
             <div className="h-full w-full relative">
-              <img src={stockImage} className="w-full h-full object-cover" alt="Preview" />
+              <img src={edit.imageUrl} className="w-full h-full object-contain bg-black/90" alt="Preview" />
             </div>
           )}
         </div>
@@ -152,10 +208,10 @@ export default function Editor() {
                     <Button 
                       size="icon" 
                       className="h-8 w-8 rounded-lg bg-gradient-primary border-0"
-                      onClick={handleGenerate}
-                      disabled={!prompt}
+                      onClick={() => generateMutation.mutate()}
+                      disabled={!prompt || generateMutation.isPending}
                     >
-                      <Wand2 className="w-4 h-4" />
+                      <Wand2 className={`w-4 h-4 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                 </div>
