@@ -98,13 +98,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!edit) return res.status(404).json({ message: "Edit not found" });
 
     // Start async processing
+    console.log(`[Generate] Starting generation for edit ${id} with prompt: "${prompt}"`);
     (async () => {
       try {
+        console.log(`[Generate] Calling OpenAI for edit ${id}...`);
         const { imageUrl: newImageUrl, refinedPrompt } = await generateImage(prompt, edit.imageUrl);
+        console.log(`[Generate] Success for edit ${id}. Updating DB...`);
         await storage.updateEditStatus(id, "completed", newImageUrl, prompt, refinedPrompt);
+        console.log(`[Generate] DB updated for edit ${id} to completed.`);
       } catch (e) {
-        console.error("Generation failed", e);
+        console.error(`[Generate] Failed for edit ${id}:`, e);
         await storage.updateEditStatus(id, "failed");
+        console.log(`[Generate] DB updated for edit ${id} to failed.`);
       }
     })();
 

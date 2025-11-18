@@ -22,6 +22,7 @@ export async function ensureBase64(imageUrl: string): Promise<string> {
 }
 
 export async function analyzeImage(imageUrl: string): Promise<{ title: string; suggestions: string[] }> {
+  console.log("[OpenAI] Analyzing image...");
   try {
     const base64Image = await ensureBase64(imageUrl);
 
@@ -76,6 +77,7 @@ export async function analyzeImage(imageUrl: string): Promise<{ title: string; s
 }
 
 export async function generateImage(userPrompt: string, originalImageUrl: string): Promise<{ imageUrl: string; refinedPrompt: string }> {
+  console.log("[OpenAI] Generating image...");
   try {
     const originalImageBase64 = await ensureBase64(originalImageUrl);
 
@@ -127,8 +129,11 @@ export async function generateImage(userPrompt: string, originalImageUrl: string
       response_format: "b64_json"
     });
 
+    if (!response.data || !response.data[0].b64_json) {
+      throw new Error("No image generated");
+    }
+
     const b64 = response.data[0].b64_json;
-    if (!b64) throw new Error("No image generated");
     
     return {
       imageUrl: `data:image/png;base64,${b64}`,

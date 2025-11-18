@@ -52,10 +52,19 @@ export default function Editor() {
       const interval = setInterval(async () => {
         const res = await fetch(`/api/edits/${id}`);
         const data = await res.json();
+        
         if (data.status === "completed") {
           clearInterval(interval);
           queryClient.invalidateQueries({ queryKey: [`/api/edits/${id}`] });
           setStep("preview");
+        } else if (data.status === "failed") {
+          clearInterval(interval);
+          setStep("prompt");
+          toast({
+            title: "Generation failed",
+            description: "The AI could not process your request. Please try again.",
+            variant: "destructive"
+          });
         }
       }, 2000);
     },
