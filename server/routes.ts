@@ -2,14 +2,32 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertEditSchema } from "@shared/schema";
+import { analyzeImage, generateImage } from "./openai";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/upload", async (req, res) => {
     try {
       const data = insertEditSchema.parse(req.body);
-      const edit = await storage.createEdit(data);
+      
+      // Perform AI Analysis
+      let analysis = { title: "Untitled Image", suggestions: [] as string[] };
+      try {
+         analysis = await analyzeImage(data.imageUrl);
+      } catch (e) {
+        console.error("Analysis failed", e);
+        // Fallback to defaults if analysis fails, don't block upload
+      }
+
+      const edit = await storage.createEdit({
+        ...data,
+        title: analysis.title,
+        suggestions: analysis.suggestions,
+        status: "pending"
+      });
+      
       res.json(edit);
     } catch (error) {
+      console.error(error);
       res.status(400).json({ message: "Invalid input" });
     }
   });
@@ -33,17 +51,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(edit);
   });
 
-  // Mock generation endpoint
-  app.post("/api/generate/:id", async (req, res) => {
+  app.patch("/api/edits/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid ID" });
+    }
+    
+    const { title } = req.body;
+    if (!title || title.trim() === "") {
+      return res.status(400).json({ message: "Title is required" });
+    }
+
+    try {
+      const edit = await storage.updateEditTitle(id, title);
+      if (!edit) return res.status(404).json({ message: "Edit not found" });
+      res.json(edit);
+    } catch (error) {
+       res.status(500).json({ message: "Failed to update" });
+    }
+  });
+
+  app.delete("/api/edits/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ message: "Invalid ID" });
     }
 
-    // Simulate AI processing delay
-    setTimeout(async () => {
-      await storage.updateEditStatus(id, "completed");
-    }, 2000);
+    try {
+      await storage.deleteEdit(id);
+      res.json({ message: "Deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete" });
+    }
+  });
+
+  app.post("/api/generate/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid ID" });
+    }
+    
+    const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ message: "Prompt is required" });
+
+    const edit = await storage.getEdit(id);
+    if (!edit) return res.status(404).json({ message: "Edit not found" });
+
+    // Start async processing
+    (async () => {
+      try {
+        const { imageUrl: newImageUrl, refinedPrompt } = await generateImage(prompt, edit.imageUrl);
+        await storage.updateEditStatus(id, "completed", newImageUrl, prompt, refinedPrompt);
+      } catch (e) {
+        console.error("Generation failed", e);
+        await storage.updateEditStatus(id, "failed");
+      }
+    })();
 
     res.json({ message: "Processing started" });
   });

@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { SUGGESTION_CHIPS } from "@/lib/mock-data";
-import { ArrowLeft, Check, Download, Loader2, RefreshCw, Undo2, Wand2 } from "lucide-react";
+import { ArrowLeft, Check, Download, Loader2, RefreshCw, Undo2, Wand2, Pencil } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,6 +24,8 @@ export default function Editor() {
   const [step, setStep] = useState<"prompt" | "processing" | "preview">("prompt");
   const [prompt, setPrompt] = useState("");
   const [intensity, setIntensity] = useState([50]);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [title, setTitle] = useState("");
 
   const { data: edit, isLoading } = useQuery<Edit>({
     queryKey: [`/api/edits/${id}`],
@@ -31,9 +33,12 @@ export default function Editor() {
   });
 
   useEffect(() => {
-    if (edit?.status === "completed") {
-      setStep("preview");
-      setPrompt(edit.prompt);
+    if (edit) {
+      setTitle(edit.title || "Untitled Draft");
+      if (edit.status === "completed") {
+        setStep("preview");
+        setPrompt(edit.prompt);
+      }
     }
   }, [edit]);
 
@@ -43,11 +48,16 @@ export default function Editor() {
     },
     onSuccess: () => {
       setStep("processing");
-      // Poll for completion or just wait for the mock timeout
-      setTimeout(() => {
-         queryClient.invalidateQueries({ queryKey: [`/api/edits/${id}`] });
-         setStep("preview");
-      }, 2500);
+      // Poll for completion
+      const interval = setInterval(async () => {
+        const res = await fetch(`/api/edits/${id}`);
+        const data = await res.json();
+        if (data.status === "completed") {
+          clearInterval(interval);
+          queryClient.invalidateQueries({ queryKey: [`/api/edits/${id}`] });
+          setStep("preview");
+        }
+      }, 2000);
     },
     onError: () => {
        toast({
@@ -55,6 +65,25 @@ export default function Editor() {
          description: "Something went wrong. Please try again.",
          variant: "destructive"
        });
+    }
+  });
+
+  const updateTitleMutation = useMutation({
+    mutationFn: async (newTitle: string) => {
+      if (!newTitle.trim()) throw new Error("Title cannot be empty");
+      await apiRequest("PATCH", `/api/edits/${id}`, { title: newTitle });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/edits/${id}`] });
+      setIsEditingTitle(false);
+      toast({ title: "Title updated" });
+    },
+    onError: (error) => {
+      toast({ 
+        title: "Update failed", 
+        description: error.message,
+        variant: "destructive" 
+      });
     }
   });
 
@@ -84,12 +113,43 @@ export default function Editor() {
       
       {/* Top Bar - Contextual Actions */}
       <div className="flex items-center justify-between mb-6 px-4">
-        <Link href="/">
-          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </Button>
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </Button>
+          </Link>
+          
+          {/* Title Editor */}
+          <div className="flex items-center gap-2">
+            {isEditingTitle ? (
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  updateTitleMutation.mutate(title);
+                }}
+                className="flex items-center gap-2"
+              >
+                <Input 
+                  value={title} 
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="h-8 w-48"
+                  autoFocus
+                  onBlur={() => updateTitleMutation.mutate(title)}
+                />
+              </form>
+            ) : (
+              <button 
+                onClick={() => setIsEditingTitle(true)}
+                className="flex items-center gap-2 text-sm font-medium hover:bg-black/5 p-1.5 px-3 rounded-lg transition-colors"
+              >
+                {title}
+                <Pencil className="w-3 h-3 opacity-50" />
+              </button>
+            )}
+          </div>
+        </div>
         
         {step === "preview" && (
            <div className="flex items-center gap-2">
@@ -125,7 +185,7 @@ export default function Editor() {
               >
                 <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
                 <p className="text-lg font-medium animate-pulse">Magic is happening...</p>
-                <p className="text-sm text-white/50 mt-2">Analyzing pixels • Enhancing details</p>
+                <p className="text-sm text-white/50 mt-2">Generating new version with AI...</p>
               </motion.div>
             ) : null}
           </AnimatePresence>
@@ -143,7 +203,7 @@ export default function Editor() {
                  <div className="relative h-full w-full flex items-center justify-center bg-black/90">
                   <div className="absolute top-4 right-4 px-3 py-1 bg-primary/90 text-white text-xs rounded-full backdrop-blur-md z-10">Edited</div>
                   <img 
-                    src={edit.imageUrl} 
+                    src={edit.generatedImageUrl || edit.imageUrl} 
                     className="w-full h-full object-contain filter contrast-125 saturate-125 brightness-110 max-h-[80vh]" 
                     alt="Edited" 
                   />
@@ -219,15 +279,19 @@ export default function Editor() {
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Suggestions</p>
                   <div className="flex flex-wrap gap-2">
-                    {SUGGESTION_CHIPS.map((chip) => (
-                      <button
-                        key={chip}
-                        onClick={() => setPrompt(chip)}
-                        className="px-3 py-1.5 text-xs rounded-lg bg-white border border-black/5 hover:border-primary/30 hover:bg-primary/5 hover:text-primary transition-colors text-muted-foreground"
-                      >
-                        {chip}
-                      </button>
-                    ))}
+                    {edit.suggestions && edit.suggestions.length > 0 ? (
+                      edit.suggestions.map((chip, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setPrompt(chip)}
+                          className="px-3 py-1.5 text-xs rounded-lg bg-white border border-black/5 hover:border-primary/30 hover:bg-primary/5 hover:text-primary transition-colors text-muted-foreground text-left"
+                        >
+                          {chip}
+                        </button>
+                      ))
+                    ) : (
+                       <p className="text-xs text-muted-foreground italic">No suggestions available</p>
+                    )}
                   </div>
                 </div>
               </div>

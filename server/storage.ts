@@ -6,7 +6,9 @@ export interface IStorage {
   createEdit(edit: InsertEdit): Promise<Edit>;
   getEdit(id: number): Promise<Edit | undefined>;
   getEdits(): Promise<Edit[]>;
-  updateEditStatus(id: number, status: string): Promise<Edit | undefined>;
+  updateEditStatus(id: number, status: string, generatedImageUrl?: string, prompt?: string, refinedPrompt?: string): Promise<Edit | undefined>;
+  updateEditTitle(id: number, title: string): Promise<Edit | undefined>;
+  deleteEdit(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -27,13 +29,31 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(edits).orderBy(desc(edits.createdAt));
   }
 
-  async updateEditStatus(id: number, status: string): Promise<Edit | undefined> {
+  async updateEditStatus(id: number, status: string, generatedImageUrl?: string, prompt?: string, refinedPrompt?: string): Promise<Edit | undefined> {
+    const updateData: Partial<Edit> = { status };
+    if (generatedImageUrl) updateData.generatedImageUrl = generatedImageUrl;
+    if (prompt) updateData.prompt = prompt;
+    if (refinedPrompt) updateData.refinedPrompt = refinedPrompt;
+    
     const [edit] = await db
       .update(edits)
-      .set({ status })
+      .set(updateData)
       .where(eq(edits.id, id))
       .returning();
     return edit;
+  }
+
+  async updateEditTitle(id: number, title: string): Promise<Edit | undefined> {
+    const [edit] = await db
+      .update(edits)
+      .set({ title })
+      .where(eq(edits.id, id))
+      .returning();
+    return edit;
+  }
+
+  async deleteEdit(id: number): Promise<void> {
+    await db.delete(edits).where(eq(edits.id, id));
   }
 }
 

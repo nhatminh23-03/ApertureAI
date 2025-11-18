@@ -1,24 +1,40 @@
 import { Layout } from "@/components/layout";
 import { GlassCard } from "@/components/ui/glass-card";
-import { Calendar, Download, MoreHorizontal, Share2, Loader2 } from "lucide-react";
+import { Calendar, Download, MoreHorizontal, Share2, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Edit } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
-
 import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function History() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
   const { data: edits, isLoading } = useQuery<Edit[]>({
     queryKey: ["/api/history"]
   });
+
+  const handleDelete = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await apiRequest("DELETE", `/api/edits/${id}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/history"] });
+      toast({ title: "Image deleted" });
+    } catch (error) {
+      toast({ title: "Failed to delete", variant: "destructive" });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -54,14 +70,14 @@ export default function History() {
               >
                 <div className="aspect-[4/3] relative overflow-hidden bg-black/5">
                   <img 
-                    src={item.imageUrl} 
-                    alt={item.prompt}
+                    src={item.generatedImageUrl || item.imageUrl} 
+                    alt={item.title || item.prompt}
                     className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${item.status === 'completed' ? 'filter contrast-125 saturate-125 brightness-110' : ''}`}
                   />
                   <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                      <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-white/90 backdrop-blur-sm">
+                        <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white">
                           <MoreHorizontal className="w-4 h-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -71,6 +87,13 @@ export default function History() {
                         </DropdownMenuItem>
                         <DropdownMenuItem>
                           <Share2 className="w-4 h-4 mr-2" /> Share
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          className="text-red-500 focus:text-red-500"
+                          onClick={(e) => handleDelete(item.id, e)}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -85,7 +108,7 @@ export default function History() {
                 <div className="p-5 flex-1 flex flex-col">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <p className="font-medium text-foreground line-clamp-2 leading-snug">
-                      {item.prompt || "Untitled Draft"}
+                      {item.title || item.prompt || "Untitled Draft"}
                     </p>
                   </div>
                   <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground pt-4 border-t border-border/50">
