@@ -1,7 +1,10 @@
 import OpenAI from "openai";
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ 
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+});
 
 // Helper to ensure we have base64
 export async function ensureBase64(imageUrl: string): Promise<string> {
@@ -121,12 +124,10 @@ export async function generateImage(userPrompt: string, originalImageUrl: string
 
     // Step 2: Generation (Text -> Image)
     const response = await openai.images.generate({
-      model: "dall-e-3",
+      model: "gpt-image-1",
       prompt: refinedPrompt.substring(0, 4000),
       n: 1,
       size: "1024x1024",
-      quality: "standard",
-      response_format: "b64_json"
     });
 
     if (!response.data || !response.data[0].b64_json) {
