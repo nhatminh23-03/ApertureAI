@@ -74,7 +74,7 @@ class PromptEngineer {
   static async refine(userPrompt: string, base64Image: string): Promise<string> {
     console.log("[PromptEngineer] Refinining prompt...");
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o", // Switched to gpt-4o for better reliability with vision tasks
       messages: [
         {
           role: "system",
@@ -98,7 +98,10 @@ class PromptEngineer {
     });
 
     const content = response.choices[0].message.content;
-    if (!content) throw new Error("Failed to generate refined prompt");
+    if (!content) {
+      console.error("[PromptEngineer] Response content is null/empty:", JSON.stringify(response, null, 2));
+      throw new Error("Failed to generate refined prompt");
+    }
     
     // Handle potential array response (rare but possible with some models)
     if (Array.isArray(content)) {
@@ -146,8 +149,14 @@ export async function generateImage(userPrompt: string, originalImageUrl: string
     const originalImageBase64 = await ensureBase64(originalImageUrl);
 
     // Step 1: Refine Prompt (Composer)
-    const refinedPrompt = await PromptEngineer.refine(userPrompt, originalImageBase64);
-    console.log("Refined Prompt:", refinedPrompt);
+    let refinedPrompt = userPrompt;
+    try {
+      refinedPrompt = await PromptEngineer.refine(userPrompt, originalImageBase64);
+      console.log("Refined Prompt:", refinedPrompt);
+    } catch (e) {
+      console.error("[Generate] Prompt refinement failed:", e);
+      throw e; // Fail explicitly rather than generating a random image
+    }
 
     // Step 2: Generate Image (Executor)
     const b64 = await Executor.execute(refinedPrompt);
