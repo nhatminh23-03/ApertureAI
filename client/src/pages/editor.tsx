@@ -260,8 +260,19 @@ export default function Editor() {
                   <p>AI applied: <span className="text-foreground font-medium">"{prompt}"</span></p>
                 </div>
 
-                <Button className="w-full gap-2" variant="outline">
-                  <Download className="w-4 h-4" /> Export Image
+                <Button 
+                  className="w-full gap-2" 
+                  variant="outline"
+                  onClick={() => {
+                    const link = document.createElement("a");
+                    link.href = edit.generatedImageUrl || edit.imageUrl;
+                    link.download = `aperture-edit-${id}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                >
+                  <Download className="w-4 h-4" /> Download
                 </Button>
               </div>
             ) : (
