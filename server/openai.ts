@@ -99,6 +99,18 @@ class PromptEngineer {
 
     const content = response.choices[0].message.content;
     if (!content) throw new Error("Failed to generate refined prompt");
+    
+    // Handle potential array response (rare but possible with some models)
+    if (Array.isArray(content)) {
+      const text = content
+        .map(c => (c as any).text || '')
+        .join('')
+        .trim();
+        
+      if (!text) throw new Error("Refined prompt is empty after processing");
+      return text;
+    }
+    
     return content;
   }
 }
