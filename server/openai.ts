@@ -31,9 +31,14 @@ export async function ensureBase64(imageUrl: string): Promise<string> {
 class VisionAnalyst {
   static async analyze(base64Image: string): Promise<{ title: string; suggestions: string[] }> {
     console.log("[VisionAnalyst] Analyzing image...");
+    
+    // Log the start of the base64 string to debug MIME type issues
+    const prefix = base64Image.substring(0, 50);
+    console.log(`[VisionAnalyst] Image prefix: ${prefix}...`);
+
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-5",
+        model: "gpt-4o", // Switch to gpt-4o for better vision stability
         messages: [
           {
             role: "system",
@@ -127,18 +132,26 @@ class Executor {
     console.log("[Executor] Editing image...");
     
     // Convert base64 to a temporary file because openai.images.edit requires a File-like object
-    const matches = base64Image.match(/^data:image\/([a-zA-Z+]+);base64,(.+)$/);
+    const matches = base64Image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
     if (!matches) throw new Error("Invalid base64 image format");
     
-    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
-    const buffer = Buffer.from(matches[2], 'base64');
+    const mimeType = matches[1];
+    const data = matches[2];
+    
+    // Extract extension from mime type (e.g. image/jpeg -> jpg)
+    let ext = 'png'; // default
+    if (mimeType === 'image/jpeg') ext = 'jpg';
+    else if (mimeType === 'image/png') ext = 'png';
+    else if (mimeType === 'image/webp') ext = 'webp';
+    
+    const buffer = Buffer.from(data, 'base64');
     const tempFilePath = path.join(os.tmpdir(), `edit-${Date.now()}.${ext}`);
     fs.writeFileSync(tempFilePath, buffer);
     
     try {
       const fileStream = fs.createReadStream(tempFilePath);
-      // @ts-ignore - The OpenAI SDK types might be slightly off for the file stream, but this works
-      const file = await toFile(fileStream, `image.${ext}`);
+      // Pass the contentType explicitly to toFile to ensure OpenAI SDK handles it correctly
+      const file = await toFile(fileStream, `image.${ext}`, { type: mimeType });
 
       const response = await openai.images.edit({
         model: "gpt-image-1",

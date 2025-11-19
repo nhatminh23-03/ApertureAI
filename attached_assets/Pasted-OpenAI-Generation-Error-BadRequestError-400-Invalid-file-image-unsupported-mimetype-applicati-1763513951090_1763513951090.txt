@@ -1,0 +1,55 @@
+OpenAI Generation Error: BadRequestError: 400 Invalid file 'image': unsupported mimetype ('application/octet-stream'). Supported file formats are 'image/jpeg', 'image/png', and 'image/webp'.
+    at Function.generate (/home/runner/workspace/node_modules/openai/src/core/error.ts:72:14)
+    at OpenAI.makeStatusError (/home/runner/workspace/node_modules/openai/src/client.ts:478:28)
+    at OpenAI.makeRequest (/home/runner/workspace/node_modules/openai/src/client.ts:728:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async Function.execute (/home/runner/workspace/server/openai.ts:143:24)
+    at async generateImage (/home/runner/workspace/server/openai.ts:195:17)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:105:58) {
+  status: 400,
+  headers: Headers {
+    'content-length': '282',
+    'content-type': 'application/json',
+    date: 'Wed, 19 Nov 2025 00:58:39 GMT',
+    via: '1.1 google',
+    'x-request-id': 'dbb24cd3-c24b-4d13-af72-264ad3d9d721'
+  },
+  requestID: 'dbb24cd3-c24b-4d13-af72-264ad3d9d721',
+  error: {
+    message: "Invalid file 'image': unsupported mimetype ('application/octet-stream'). Supported file formats are 'image/jpeg', 'image/png', and 'image/webp'.",
+    type: 'invalid_request_error',
+    param: 'image',
+    code: 'unsupported_file_mimetype'
+  },
+  code: 'unsupported_file_mimetype',
+  param: 'image',
+  type: 'invalid_request_error'
+}
+[Generate] Failed for edit 26: BadRequestError: 400 Invalid file 'image': unsupported mimetype ('application/octet-stream'). Supported file formats are 'image/jpeg', 'image/png', and 'image/webp'.
+    at Function.generate (/home/runner/workspace/node_modules/openai/src/core/error.ts:72:14)
+    at OpenAI.makeStatusError (/home/runner/workspace/node_modules/openai/src/client.ts:478:28)
+    at OpenAI.makeRequest (/home/runner/workspace/node_modules/openai/src/client.ts:728:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async Function.execute (/home/runner/workspace/server/openai.ts:143:24)
+    at async generateImage (/home/runner/workspace/server/openai.ts:195:17)
+    at async <anonymous> (/home/runner/workspace/server/routes.ts:105:58) {
+  status: 400,
+  headers: Headers {
+    'content-length': '282',
+    'content-type': 'application/json',
+    date: 'Wed, 19 Nov 2025 00:58:39 GMT',
+    via: '1.1 google',
+    'x-request-id': 'dbb24cd3-c24b-4d13-af72-264ad3d9d721'
+  },
+  requestID: 'dbb24cd3-c24b-4d13-af72-264ad3d9d721',
+  error: {
+    message: "Invalid file 'image': unsupported mimetype ('application/octet-stream'). Supported file formats are 'image/jpeg', 'image/png', and 'image/webp'.",
+    type: 'invalid_request_error',
+    param: 'image',
+    code: 'unsupported_file_mimetype'
+  },
+  code: 'unsupported_file_mimetype',
+  param: 'image',
+  type: 'invalid_request_error'
+}
+[Generate] DB updated for edit 26 to failed.
