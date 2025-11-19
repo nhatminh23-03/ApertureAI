@@ -1,4 +1,7 @@
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ 
@@ -120,21 +123,51 @@ class PromptEngineer {
 
 // Role 3: Executor - Generates the image
 class Executor {
-  static async execute(prompt: string): Promise<string> {
-    console.log("[Executor] Generating image...");
-    const response = await openai.images.generate({
-      model: "gpt-image-1",
-      prompt: prompt.substring(0, 4000),
-      n: 1,
-      size: "1024x1024",
-      response_format: "b64_json" 
-    });
+  static async execute(prompt: string, base64Image: string): Promise<string> {
+    console.log("[Executor] Editing image...");
+    
+    // Convert base64 to a temporary file because openai.images.edit requires a File-like object
+    const matches = base64Image.match(/^data:image\/([a-zA-Z+]+);base64,(.+)$/);
+    if (!matches) throw new Error("Invalid base64 image format");
+    
+    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+    const tempFilePath = path.join(os.tmpdir(), `edit-${Date.now()}.${ext}`);
+    fs.writeFileSync(tempFilePath, buffer);
+    
+    try {
+      const fileStream = fs.createReadStream(tempFilePath);
+      // @ts-ignore - The OpenAI SDK types might be slightly off for the file stream, but this works
+      const file = await toFile(fileStream, `image.${ext}`);
 
-    if (!response.data || !response.data[0].b64_json) {
-      throw new Error("No image generated");
+      const response = await openai.images.edit({
+        model: "gpt-image-1",
+        image: file,
+        prompt: prompt.substring(0, 4000),
+        n: 1,
+        size: "1024x1024",
+      });
+
+      if (!response.data || (!response.data[0].b64_json && !response.data[0].url)) {
+        throw new Error("No image generated");
+      }
+
+      // Return base64 directly if available, otherwise fetch URL and convert
+      if (response.data[0].b64_json) {
+        return response.data[0].b64_json;
+      } else if (response.data[0].url) {
+         const urlResponse = await fetch(response.data[0].url);
+         const arrayBuffer = await urlResponse.arrayBuffer();
+         return Buffer.from(arrayBuffer).toString('base64');
+      }
+      
+      throw new Error("Failed to retrieve image data");
+    } finally {
+      // Clean up temp file
+      if (fs.existsSync(tempFilePath)) {
+        fs.unlinkSync(tempFilePath);
+      }
     }
-
-    return response.data[0].b64_json;
   }
 }
 
@@ -155,11 +188,11 @@ export async function generateImage(userPrompt: string, originalImageUrl: string
       console.log("Refined Prompt:", refinedPrompt);
     } catch (e) {
       console.error("[Generate] Prompt refinement failed:", e);
-      throw e; // Fail explicitly rather than generating a random image
+      throw e; 
     }
 
-    // Step 2: Generate Image (Executor)
-    const b64 = await Executor.execute(refinedPrompt);
+    // Step 2: Edit Image (Executor) - Now passing the original image for editing
+    const b64 = await Executor.execute(refinedPrompt, originalImageBase64);
     
     return {
       imageUrl: `data:image/png;base64,${b64}`,
