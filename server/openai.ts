@@ -2,6 +2,7 @@ import OpenAI, { toFile } from "openai";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import sharp from "sharp";
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ 
@@ -246,16 +247,26 @@ export async function generateImageWithStrength(
 
     // Step 2: Edit Image with adjusted parameters
     // Note: DALL-E doesn't directly support effect strength, so we adjust via prompt
-    // For production, you might want to use additional post-processing
     const b64 = await Executor.execute(refinedPrompt, sourceImageBase64);
     
-    // Step 3: Ensure size matches target (basic implementation)
-    // TODO: Add actual image resizing/padding logic here
-    // For now, DALL-E returns 1024x1024 by default
-    // In production, use Sharp or similar to resize to exact dimensions
+    // Step 3: Resize generated image to match target dimensions exactly
+    const generatedBuffer = Buffer.from(b64, 'base64');
+    
+    // Use 'cover' to fill frame while preserving aspect ratio (crops edges if needed)
+    // This maintains scale alignment for before/after comparison
+    const resizedBuffer = await sharp(generatedBuffer)
+      .resize(targetWidth, targetHeight, {
+        fit: 'cover', // Fill frame, crop edges to preserve aspect ratio
+        kernel: 'lanczos3', // High-quality resizing
+        position: 'centre' // Center the crop
+      })
+      .png()
+      .toBuffer();
+    
+    const resizedBase64 = resizedBuffer.toString('base64');
     
     return {
-      imageUrl: `data:image/png;base64,${b64}`,
+      imageUrl: `data:image/png;base64,${resizedBase64}`,
       refinedPrompt
     };
   } catch (error) {
