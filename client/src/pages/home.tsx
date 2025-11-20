@@ -23,7 +23,8 @@ export default function Home() {
             const res = await apiRequest("POST", "/api/upload", {
               imageData: base64
             });
-            resolve(res);
+            const data = await res.json();
+            resolve(data);
           } catch (e) {
             reject(e);
           }
