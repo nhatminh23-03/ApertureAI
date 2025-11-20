@@ -6,7 +6,7 @@ export interface IStorage {
   createEdit(edit: InsertEdit): Promise<Edit>;
   getEdit(id: number): Promise<Edit | undefined>;
   getEdits(): Promise<Edit[]>;
-  updateEditStatus(id: number, status: string, generatedImageUrl?: string, prompt?: string, refinedPrompt?: string): Promise<Edit | undefined>;
+  updateEditResult(id: number, currentImageId: string, status: string, prompt?: string, refinedPrompt?: string, effectStrength?: number): Promise<Edit | undefined>;
   updateEditTitle(id: number, title: string): Promise<Edit | undefined>;
   deleteEdit(id: number): Promise<void>;
 }
@@ -29,11 +29,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(edits).orderBy(desc(edits.createdAt));
   }
 
-  async updateEditStatus(id: number, status: string, generatedImageUrl?: string, prompt?: string, refinedPrompt?: string): Promise<Edit | undefined> {
-    const updateData: Partial<Edit> = { status };
-    if (generatedImageUrl) updateData.generatedImageUrl = generatedImageUrl;
-    if (prompt) updateData.prompt = prompt;
-    if (refinedPrompt) updateData.refinedPrompt = refinedPrompt;
+  async updateEditResult(id: number, currentImageId: string, status: string, prompt?: string, refinedPrompt?: string, effectStrength?: number): Promise<Edit | undefined> {
+    const updateData: Partial<Edit> = { status, currentImageId };
+    if (prompt !== undefined) updateData.prompt = prompt;
+    if (refinedPrompt !== undefined) updateData.refinedPrompt = refinedPrompt;
+    if (effectStrength !== undefined) updateData.effectStrength = effectStrength;
     
     const [edit] = await db
       .update(edits)
