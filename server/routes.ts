@@ -97,15 +97,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Source image not found" });
       }
       
-      // Get target dimensions from keep_size_of image
+      // Get target dimensions from keep_size_of image (without saving)
       const targetImageData = ImageStorage.loadImage(keep_size_of);
       if (!targetImageData) {
         return res.status(404).json({ message: "Target size image not found" });
       }
       
-      const targetMeta = await ImageStorage.saveImage(targetImageData);
-      const targetWidth = targetMeta.width;
-      const targetHeight = targetMeta.height;
+      const { width: targetWidth, height: targetHeight } = await ImageStorage.getImageDimensionsFromBase64(targetImageData);
       
       // Generate edited image
       const { imageUrl: editedImageData, refinedPrompt } = await generateImageWithStrength(
@@ -196,17 +194,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         imageIds.add(edit.currentImageId);
       }
 
-      // Delete all associated image files
+      // Delete all associated image files - fail the whole operation if any deletion fails
+      const failedDeletes: string[] = [];
       for (const imageId of Array.from(imageIds)) {
-        try {
-          ImageStorage.deleteImage(imageId);
-        } catch (e) {
-          console.error(`Failed to delete image ${imageId}:`, e);
-          // Continue even if image deletion fails
+        const deleted = ImageStorage.deleteImage(imageId);
+        if (!deleted) {
+          failedDeletes.push(imageId);
         }
       }
 
-      // Delete the edit record from database
+      if (failedDeletes.length > 0) {
+        console.error(`Failed to delete images: ${failedDeletes.join(", ")}`);
+        return res.status(500).json({ 
+          message: "Failed to delete some image files",
+          failedImages: failedDeletes
+        });
+      }
+
+      // Delete the edit record from database only if all files deleted successfully
       await storage.deleteEdit(id);
       res.json({ message: "Deleted successfully" });
     } catch (error) {

@@ -94,13 +94,10 @@ export class ImageStorage {
   }
   
   /**
-   * Get image dimensions from buffer
-   * Simple implementation - in production you might use a library like 'sharp' or 'image-size'
+   * Get image dimensions from buffer (public helper)
    */
-  private static async getImageDimensions(buffer: Buffer, mimeType: string): Promise<{ width: number; height: number }> {
-    // For now, return a default size - in production, parse the image headers
+  static async getImageDimensionsFromBuffer(buffer: Buffer, mimeType: string): Promise<{ width: number; height: number }> {
     // PNG: width/height at bytes 16-23
-    // JPEG: scan for SOF marker
     if (mimeType === "image/png" && buffer.length > 24) {
       const width = buffer.readUInt32BE(16);
       const height = buffer.readUInt32BE(20);
@@ -109,5 +106,27 @@ export class ImageStorage {
     
     // Default fallback
     return { width: 1024, height: 1024 };
+  }
+
+  /**
+   * Get image dimensions from base64
+   */
+  static async getImageDimensionsFromBase64(base64Image: string): Promise<{ width: number; height: number }> {
+    const matches = base64Image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+    if (!matches) throw new Error("Invalid base64 image format");
+    
+    const mimeType = matches[1];
+    const data = matches[2];
+    const buffer = Buffer.from(data, "base64");
+    
+    return this.getImageDimensionsFromBuffer(buffer, mimeType);
+  }
+  
+  /**
+   * Get image dimensions from buffer
+   * Simple implementation - in production you might use a library like 'sharp' or 'image-size'
+   */
+  private static async getImageDimensions(buffer: Buffer, mimeType: string): Promise<{ width: number; height: number }> {
+    return this.getImageDimensionsFromBuffer(buffer, mimeType);
   }
 }

@@ -282,14 +282,24 @@ export async function generateImageWithStrength(
 
     // Step 2: Pad source image to square before sending to OpenAI
     const srcBuf = Buffer.from(sourceImageBase64.split(",")[1], "base64");
-    const { square, pad } = await padToSquare(srcBuf);
+    const { square } = await padToSquare(srcBuf);
     const squareBase64 = `data:image/png;base64,${square.toString("base64")}`;
 
     // Step 3: Edit the square image with OpenAI
     const b64SquareOut = await Executor.execute(refinedPrompt, squareBase64);
     
-    // Step 4: Unpad to restore exact original dimensions (no cropping or distortion)
-    const finalBuf = await unpadFromSquare(b64SquareOut, pad);
+    // Step 4: Unpad to restore TARGET dimensions (preserving the target aspect ratio)
+    // Create pad info for target dimensions
+    const S = Math.max(targetWidth, targetHeight);
+    const targetPad: PadInfo = {
+      S,
+      left: Math.floor((S - targetWidth) / 2),
+      top: Math.floor((S - targetHeight) / 2),
+      width: targetWidth,
+      height: targetHeight
+    };
+    
+    const finalBuf = await unpadFromSquare(b64SquareOut, targetPad);
     const finalB64 = finalBuf.toString('base64');
     
     return {
