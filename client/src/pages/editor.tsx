@@ -48,12 +48,15 @@ export default function Editor() {
           if (parsed.step !== undefined) setStep(parsed.step);
           if (parsed.prompt !== undefined) setPrompt(parsed.prompt);
           if (parsed.intensity !== undefined) setIntensity([parsed.intensity]);
+          if (parsed.refineFromCurrent !== undefined) setRefineFromCurrent(parsed.refineFromCurrent);
         } catch (e) {
           console.error("Failed to restore state", e);
         }
       } else if (edit.status === "completed") {
         setStep("preview");
         setPrompt(edit.prompt);
+        // Default to refining from current edit when opening a completed edit
+        setRefineFromCurrent(true);
         // Load AI suggestions on initial load of completed edit
         generateAISuggestions();
       }
@@ -66,10 +69,11 @@ export default function Editor() {
       sessionStorage.setItem(`edit-${id}`, JSON.stringify({
         step,
         prompt,
-        intensity: intensity[0]
+        intensity: intensity[0],
+        refineFromCurrent
       }));
     }
-  }, [step, prompt, intensity, id]);
+  }, [step, prompt, intensity, refineFromCurrent, id]);
 
   // Debounced effect strength regeneration
   useEffect(() => {
@@ -285,14 +289,14 @@ export default function Editor() {
 
           {step === "preview" ? (
             <BeforeAfterSlider
-              beforeImage={`/api/data/${edit.originalImageId}.png`}
+              beforeImage={`/api/data/${refineFromCurrent ? edit.currentImageId : edit.originalImageId}.png`}
               afterImage={`/api/data/${edit.currentImageId}.png`}
               intensity={100}
               className="h-full w-full"
             />
           ) : (
             <div className="h-full w-full relative flex items-center justify-center bg-black/90">
-              <img src={`/api/data/${edit.originalImageId}.png`} className="w-full h-full object-contain max-h-[80vh]" alt="Preview" data-testid="image-preview" />
+              <img src={`/api/data/${refineFromCurrent && edit.status === "completed" ? edit.currentImageId : edit.originalImageId}.png`} className="w-full h-full object-contain max-h-[80vh]" alt="Preview" data-testid="image-preview" />
             </div>
           )}
         </div>
