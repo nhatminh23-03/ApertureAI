@@ -70,7 +70,7 @@ export default function History() {
               >
                 <div className="aspect-[4/3] relative overflow-hidden bg-black/5">
                   <img 
-                    src={item.generatedImageUrl || item.imageUrl} 
+                    src={`/api/data/${item.currentImageId}.png`} 
                     alt={item.title || item.prompt}
                     className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${item.status === 'completed' ? 'filter contrast-125 saturate-125 brightness-110' : ''}`}
                   />

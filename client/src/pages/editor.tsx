@@ -29,6 +29,7 @@ export default function Editor() {
   const [title, setTitle] = useState("");
   const [refineFromCurrent, setRefineFromCurrent] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const { data: edit, isLoading } = useQuery<Edit>({
     queryKey: [`/api/edits/${id}`],
@@ -70,15 +71,31 @@ export default function Editor() {
     }
   }, [step, prompt, intensity, id]);
 
+  // Debounced effect strength regeneration
+  useEffect(() => {
+    if (!edit || step !== "preview" || !prompt) return;
+    
+    const timer = setTimeout(() => {
+      // Trigger regeneration with new effect strength
+      setIsRegenerating(true);
+      generateMutation.mutate();
+    }, 400); // 400ms debounce
+
+    return () => clearTimeout(timer);
+  }, [intensity]);
+
   const generateMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", `/api/generate/${id}`, { 
         prompt,
-        refineFromCurrent 
+        refineFromCurrent,
+        effectStrength: intensity[0]
       });
     },
     onSuccess: () => {
-      setStep("processing");
+      if (!isRegenerating) {
+        setStep("processing");
+      }
       // Poll for completion
       const interval = setInterval(async () => {
         const res = await fetch(`/api/edits/${id}`);
@@ -88,12 +105,16 @@ export default function Editor() {
           clearInterval(interval);
           queryClient.invalidateQueries({ queryKey: [`/api/edits/${id}`] });
           setStep("preview");
+          setIsRegenerating(false);
           
-          // Generate AI suggestions after completion
-          generateAISuggestions();
+          // Generate AI suggestions after completion (only on first generation)
+          if (!aiSuggestions.length) {
+            generateAISuggestions();
+          }
         } else if (data.status === "failed") {
           clearInterval(interval);
           setStep("prompt");
+          setIsRegenerating(false);
           toast({
             title: "Generation failed",
             description: "The AI could not process your request. Please try again.",
@@ -263,14 +284,14 @@ export default function Editor() {
 
           {step === "preview" ? (
             <BeforeAfterSlider
-              beforeImage={edit.imageUrl}
-              afterImage={edit.generatedImageUrl || edit.imageUrl}
-              intensity={intensity[0]}
+              beforeImage={`/api/data/${edit.originalImageId}.png`}
+              afterImage={`/api/data/${edit.currentImageId}.png`}
+              intensity={100}
               className="h-full w-full"
             />
           ) : (
             <div className="h-full w-full relative flex items-center justify-center bg-black/90">
-              <img src={edit.imageUrl} className="w-full h-full object-contain max-h-[80vh]" alt="Preview" data-testid="image-preview" />
+              <img src={`/api/data/${edit.originalImageId}.png`} className="w-full h-full object-contain max-h-[80vh]" alt="Preview" data-testid="image-preview" />
             </div>
           )}
         </div>
@@ -349,7 +370,7 @@ export default function Editor() {
                   variant="outline"
                   onClick={() => {
                     const link = document.createElement("a");
-                    link.href = edit.generatedImageUrl || edit.imageUrl;
+                    link.href = `/api/data/${edit.currentImageId}.png`;
                     link.download = `aperture-edit-${id}.png`;
                     document.body.appendChild(link);
                     link.click();

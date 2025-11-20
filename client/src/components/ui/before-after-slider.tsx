@@ -97,9 +97,6 @@ export function BeforeAfterSlider({
           src={afterImage} 
           alt="Edited" 
           className="w-full h-full object-contain max-h-[80vh]"
-          style={{ 
-            opacity: intensity / 100,
-          }}
           draggable={false}
           data-testid="image-edited"
         />

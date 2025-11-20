@@ -21,11 +21,9 @@ export default function Home() {
           try {
             const base64 = reader.result as string;
             const res = await apiRequest("POST", "/api/upload", {
-              imageUrl: base64,
-              prompt: "",
-              status: "pending"
+              imageData: base64
             });
-            resolve(await res.json());
+            resolve(res);
           } catch (e) {
             reject(e);
           }
