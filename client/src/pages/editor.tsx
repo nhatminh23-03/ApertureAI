@@ -124,6 +124,7 @@ export default function Editor() {
       }, 2000);
     },
     onError: () => {
+       setIsRegenerating(false);
        toast({
          title: "Generation failed",
          description: "Something went wrong. Please try again.",
