@@ -4,8 +4,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { ArrowLeft, Check, Download, Loader2, RefreshCw, Undo2, Wand2, Pencil } from "lucide-react";
+import { BeforeAfterSlider } from "@/components/ui/before-after-slider";
+import { ArrowLeft, Check, Download, Loader2, RefreshCw, Undo2, Wand2, Pencil, Sparkles } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,6 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { Edit } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
 
 export default function Editor() {
   const [location] = useLocation();
@@ -23,9 +24,11 @@ export default function Editor() {
 
   const [step, setStep] = useState<"prompt" | "processing" | "preview">("prompt");
   const [prompt, setPrompt] = useState("");
-  const [intensity, setIntensity] = useState([50]);
+  const [intensity, setIntensity] = useState([100]);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState("");
+  const [refineFromCurrent, setRefineFromCurrent] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
 
   const { data: edit, isLoading } = useQuery<Edit>({
     queryKey: [`/api/edits/${id}`],
@@ -35,16 +38,44 @@ export default function Editor() {
   useEffect(() => {
     if (edit) {
       setTitle(edit.title || "Untitled Draft");
-      if (edit.status === "completed") {
+      
+      // Restore from sessionStorage if available
+      const cachedState = sessionStorage.getItem(`edit-${id}`);
+      if (cachedState) {
+        try {
+          const parsed = JSON.parse(cachedState);
+          if (parsed.step !== undefined) setStep(parsed.step);
+          if (parsed.prompt !== undefined) setPrompt(parsed.prompt);
+          if (parsed.intensity !== undefined) setIntensity([parsed.intensity]);
+        } catch (e) {
+          console.error("Failed to restore state", e);
+        }
+      } else if (edit.status === "completed") {
         setStep("preview");
         setPrompt(edit.prompt);
+        // Load AI suggestions on initial load of completed edit
+        generateAISuggestions();
       }
     }
-  }, [edit]);
+  }, [edit, id]);
+
+  // Persist state to sessionStorage
+  useEffect(() => {
+    if (id) {
+      sessionStorage.setItem(`edit-${id}`, JSON.stringify({
+        step,
+        prompt,
+        intensity: intensity[0]
+      }));
+    }
+  }, [step, prompt, intensity, id]);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", `/api/generate/${id}`, { prompt });
+      await apiRequest("POST", `/api/generate/${id}`, { 
+        prompt,
+        refineFromCurrent 
+      });
     },
     onSuccess: () => {
       setStep("processing");
@@ -57,6 +88,9 @@ export default function Editor() {
           clearInterval(interval);
           queryClient.invalidateQueries({ queryKey: [`/api/edits/${id}`] });
           setStep("preview");
+          
+          // Generate AI suggestions after completion
+          generateAISuggestions();
         } else if (data.status === "failed") {
           clearInterval(interval);
           setStep("prompt");
@@ -76,6 +110,34 @@ export default function Editor() {
        });
     }
   });
+
+  const generateAISuggestions = async () => {
+    try {
+      const response = await fetch(`/api/suggestions/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAiSuggestions(data.suggestions || []);
+      } else {
+        // Fallback to generic suggestions
+        setAiSuggestions([
+          "Enhance lighting and contrast",
+          "Add subtle background blur",
+          "Apply vintage film effect",
+          "Increase color saturation",
+          "Add dramatic vignette"
+        ]);
+      }
+    } catch (error) {
+      // Fallback to generic suggestions if API fails
+      setAiSuggestions([
+        "Enhance lighting and contrast",
+        "Add subtle background blur",
+        "Apply vintage film effect",
+        "Increase color saturation",
+        "Add dramatic vignette"
+      ]);
+    }
+  };
 
   const updateTitleMutation = useMutation({
     mutationFn: async (newTitle: string) => {
@@ -200,28 +262,15 @@ export default function Editor() {
           </AnimatePresence>
 
           {step === "preview" ? (
-            <ResizablePanelGroup direction="horizontal" className="h-full w-full">
-              <ResizablePanel defaultSize={50} minSize={30}>
-                <div className="relative h-full w-full">
-                  <div className="absolute top-4 left-4 px-3 py-1 bg-black/60 text-white text-xs rounded-full backdrop-blur-md z-10">Original</div>
-                  <img src={edit.imageUrl} className="w-full h-full object-contain bg-black/90 max-h-[80vh]" alt="Original" />
-                </div>
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={50} minSize={30}>
-                 <div className="relative h-full w-full flex items-center justify-center bg-black/90">
-                  <div className="absolute top-4 right-4 px-3 py-1 bg-primary/90 text-white text-xs rounded-full backdrop-blur-md z-10">Edited</div>
-                  <img 
-                    src={edit.generatedImageUrl || edit.imageUrl} 
-                    className="w-full h-full object-contain filter contrast-125 saturate-125 brightness-110 max-h-[80vh]" 
-                    alt="Edited" 
-                  />
-                </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
+            <BeforeAfterSlider
+              beforeImage={edit.imageUrl}
+              afterImage={edit.generatedImageUrl || edit.imageUrl}
+              intensity={intensity[0]}
+              className="h-full w-full"
+            />
           ) : (
             <div className="h-full w-full relative flex items-center justify-center bg-black/90">
-              <img src={edit.imageUrl} className="w-full h-full object-contain max-h-[80vh]" alt="Preview" />
+              <img src={edit.imageUrl} className="w-full h-full object-contain max-h-[80vh]" alt="Preview" data-testid="image-preview" />
             </div>
           )}
         </div>
@@ -241,11 +290,11 @@ export default function Editor() {
             </div>
 
             {step === "preview" ? (
-              <div className="space-y-8 py-4">
+              <div className="space-y-6 py-4">
                 <div className="space-y-4">
                   <div className="flex justify-between text-sm font-medium">
                     <span>Effect Strength</span>
-                    <span className="text-primary">{intensity}%</span>
+                    <span className="text-primary" data-testid="text-intensity-value">{intensity}%</span>
                   </div>
                   <Slider 
                     value={intensity} 
@@ -253,12 +302,47 @@ export default function Editor() {
                     max={100} 
                     step={1} 
                     className="cursor-pointer"
+                    data-testid="slider-intensity"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    {intensity[0] === 0 && "Showing original image"}
+                    {intensity[0] > 0 && intensity[0] < 100 && "Blending original and edited"}
+                    {intensity[0] === 100 && "Showing full edited version"}
+                  </p>
                 </div>
                 
                 <div className="p-4 rounded-xl bg-muted/50 border border-white/10 text-sm text-muted-foreground">
                   <p>AI applied: <span className="text-foreground font-medium">"{prompt}"</span></p>
                 </div>
+
+                {/* AI Suggestions Section */}
+                {aiSuggestions.length > 0 && (
+                  <div className="space-y-3 p-4 rounded-xl bg-gradient-to-br from-primary/5 to-purple-500/5 border border-primary/20">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span>AI Suggestions</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Apply these enhancements to refine your edit further
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {aiSuggestions.map((suggestion, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            setPrompt(suggestion);
+                            setRefineFromCurrent(true);
+                            setStep("prompt");
+                          }}
+                          className="px-3 py-1.5 text-xs rounded-lg bg-white/80 dark:bg-black/40 border border-primary/20 hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-colors"
+                          data-testid={`button-suggestion-${i}`}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <Button 
                   className="w-full gap-2" 
@@ -271,6 +355,7 @@ export default function Editor() {
                     link.click();
                     document.body.removeChild(link);
                   }}
+                  data-testid="button-download"
                 >
                   <Download className="w-4 h-4" /> Download
                 </Button>
@@ -283,6 +368,7 @@ export default function Editor() {
                     className="min-h-[120px] resize-none bg-white/50 border-white/20 focus:border-primary/50 text-base p-4 rounded-2xl"
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
+                    data-testid="input-prompt"
                   />
                   <div className="absolute bottom-3 right-3">
                     <Button 
@@ -290,11 +376,29 @@ export default function Editor() {
                       className="h-8 w-8 rounded-lg bg-gradient-primary border-0"
                       onClick={() => generateMutation.mutate()}
                       disabled={!prompt || generateMutation.isPending}
+                      data-testid="button-generate"
                     >
                       <Wand2 className={`w-4 h-4 ${generateMutation.isPending ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                 </div>
+
+                {/* Regenerate Mode Toggle */}
+                {edit.status === "completed" && (
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-white/10">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs font-medium">Refine Current Edit</span>
+                      <span className="text-xs text-muted-foreground">
+                        {refineFromCurrent ? "Uses edited image" : "Uses original image"}
+                      </span>
+                    </div>
+                    <Switch 
+                      checked={refineFromCurrent}
+                      onCheckedChange={setRefineFromCurrent}
+                      data-testid="switch-refine-mode"
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Suggestions</p>
@@ -305,6 +409,7 @@ export default function Editor() {
                           key={i}
                           onClick={() => setPrompt(chip)}
                           className="px-3 py-1.5 text-xs rounded-lg bg-white border border-black/5 hover:border-primary/30 hover:bg-primary/5 hover:text-primary transition-colors text-muted-foreground text-left"
+                          data-testid={`button-initial-suggestion-${i}`}
                         >
                           {chip}
                         </button>

@@ -91,18 +91,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ message: "Invalid ID" });
     }
     
-    const { prompt } = req.body;
+    const { prompt, refineFromCurrent } = req.body;
     if (!prompt) return res.status(400).json({ message: "Prompt is required" });
 
     const edit = await storage.getEdit(id);
     if (!edit) return res.status(404).json({ message: "Edit not found" });
 
     // Start async processing
-    console.log(`[Generate] Starting generation for edit ${id} with prompt: "${prompt}"`);
+    console.log(`[Generate] Starting generation for edit ${id} with prompt: "${prompt}", refineFromCurrent: ${refineFromCurrent}`);
     (async () => {
       try {
         console.log(`[Generate] Calling OpenAI for edit ${id}...`);
-        const { imageUrl: newImageUrl, refinedPrompt } = await generateImage(prompt, edit.imageUrl);
+        // Use edited image if refining from current, otherwise use original
+        const sourceImage = refineFromCurrent && edit.generatedImageUrl ? edit.generatedImageUrl : edit.imageUrl;
+        const { imageUrl: newImageUrl, refinedPrompt } = await generateImage(prompt, sourceImage);
         console.log(`[Generate] Success for edit ${id}. Updating DB...`);
         await storage.updateEditStatus(id, "completed", newImageUrl, prompt, refinedPrompt);
         console.log(`[Generate] DB updated for edit ${id} to completed.`);
@@ -114,6 +116,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     })();
 
     res.json({ message: "Processing started" });
+  });
+
+  app.get("/api/suggestions/:id", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid ID" });
+    }
+
+    const edit = await storage.getEdit(id);
+    if (!edit) return res.status(404).json({ message: "Edit not found" });
+
+    try {
+      // Generate AI suggestions based on the edited image
+      const suggestions = await analyzeImage(edit.generatedImageUrl || edit.imageUrl);
+      res.json({ suggestions: suggestions.suggestions });
+    } catch (error) {
+      console.error("Suggestions generation failed:", error);
+      // Return fallback suggestions if AI fails
+      res.json({
+        suggestions: [
+          "Enhance lighting and contrast",
+          "Add subtle background blur",
+          "Apply vintage film effect",
+          "Increase color saturation",
+          "Add dramatic vignette"
+        ]
+      });
+    }
   });
 
   const httpServer = createServer(app);
