@@ -1,0 +1,71 @@
+B) Proper “perfect overlay” pipeline (no letterboxing shown)
+
+Letterbox before sending to OpenAI, then unletterbox after you get the square back. That preserves the original composition and yields a final image with exact original W×H without visible bars.
+
+import sharp from "sharp";
+
+type PadInfo = { S: number; left: number; top: number; width: number; height: number };
+
+// 1) Pad original to square (transparent) before sending to OpenAI
+async function padToSquare(buf: Buffer): Promise<{ square: Buffer; pad: PadInfo }> {
+  const meta = await sharp(buf).metadata();
+  const W = meta.width!, H = meta.height!;
+  const S = Math.max(W, H);
+  const left = Math.floor((S - W) / 2);
+  const top  = Math.floor((S - H) / 2);
+
+  const square = await sharp(buf)
+    .extend({ top, bottom: S - H - top, left, right: S - W - left, background: { r:0,g:0,b:0,alpha:0 } })
+    .png()
+    .toBuffer();
+
+  return { square, pad: { S, left, top, width: W, height: H } };
+}
+
+// 2) After OpenAI returns 1024x1024, scale back to S×S and crop out the padding
+async function unpadFromSquare(returnedSquareB64: string, pad: PadInfo): Promise<Buffer> {
+  const squareBuf = Buffer.from(returnedSquareB64, "base64");
+  const scaled = await sharp(squareBuf).resize(pad.S, pad.S).toBuffer();
+  const cropped = await sharp(scaled)
+    .extract({ left: pad.left, top: pad.top, width: pad.width, height: pad.height })
+    .toBuffer();
+  return cropped; // exact original W×H
+}
+
+
+How to use it around your call:
+
+// prepare source
+const sourceImageBase64 = await ensureBase64(sourceImageUrl);
+const srcBuf = Buffer.from(sourceImageBase64.split(",")[1], "base64");
+const { square, pad } = await padToSquare(srcBuf);
+
+// call OpenAI with the **square** image
+const b64SquareOut = await Executor.execute(refinedPrompt, `data:image/png;base64,${square.toString("base64")}`);
+
+// restore to original W×H with no cropping
+const finalBuf = await unpadFromSquare(b64SquareOut, pad);
+const finalB64 = finalBuf.toString("base64");
+return { imageUrl: `data:image/png;base64,${finalB64}`, refinedPrompt };
+
+
+Notes:
+
+You can also supply a mask that’s black over the padded borders so the model doesn’t “paint” into the padding.
+
+Keep size: "1024x1024"; the pad/unpad mapping handles the aspect ratio safely.
+
+Bonus: make “Effect Strength” real (not a cross-fade)
+
+Right now you only change the prompt text to “subtle/moderate/strong”. That won’t prevent size issues and can feel like a blend. Add a true strength parameter that your executor honors (e.g., scale color-grade amount, LUT intensity, or diffusion guidance/strength). Example hook:
+
+// Executor.execute(...)
+const response = await openai.images.edit({
+  model: "gpt-image-1",
+  image: file,
+  prompt: `${prompt}\nApply intensity=${effectStrength}`, // keep as hint
+  size: "1024x1024",
+});
+
+
+…and in the local post-process, modulate the effect map (e.g., curves, saturation) by effectStrength if you have deterministic steps. If you later move to SDXL Inpaint, you can map it to guidance_scale or strength.

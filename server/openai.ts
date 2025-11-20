@@ -10,6 +10,41 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
 });
 
+// Padding info for square letterboxing
+type PadInfo = { S: number; left: number; top: number; width: number; height: number };
+
+// Pad image to square (transparent) before sending to OpenAI
+async function padToSquare(buf: Buffer): Promise<{ square: Buffer; pad: PadInfo }> {
+  const meta = await sharp(buf).metadata();
+  const W = meta.width!, H = meta.height!;
+  const S = Math.max(W, H);
+  const left = Math.floor((S - W) / 2);
+  const top = Math.floor((S - H) / 2);
+
+  const square = await sharp(buf)
+    .extend({ 
+      top, 
+      bottom: S - H - top, 
+      left, 
+      right: S - W - left, 
+      background: { r: 0, g: 0, b: 0, alpha: 0 } 
+    })
+    .png()
+    .toBuffer();
+
+  return { square, pad: { S, left, top, width: W, height: H } };
+}
+
+// After OpenAI returns 1024x1024, scale back to S×S and crop out padding
+async function unpadFromSquare(returnedSquareB64: string, pad: PadInfo): Promise<Buffer> {
+  const squareBuf = Buffer.from(returnedSquareB64, "base64");
+  const scaled = await sharp(squareBuf).resize(pad.S, pad.S).toBuffer();
+  const cropped = await sharp(scaled)
+    .extract({ left: pad.left, top: pad.top, width: pad.width, height: pad.height })
+    .toBuffer();
+  return cropped; // exact original W×H
+}
+
 // Helper to ensure we have base64
 export async function ensureBase64(imageUrl: string): Promise<string> {
   if (imageUrl.startsWith("data:image")) {
@@ -245,28 +280,20 @@ export async function generateImageWithStrength(
       refinedPrompt = userPrompt; // Fallback to original prompt
     }
 
-    // Step 2: Edit Image with adjusted parameters
-    // Note: DALL-E doesn't directly support effect strength, so we adjust via prompt
-    const b64 = await Executor.execute(refinedPrompt, sourceImageBase64);
+    // Step 2: Pad source image to square before sending to OpenAI
+    const srcBuf = Buffer.from(sourceImageBase64.split(",")[1], "base64");
+    const { square, pad } = await padToSquare(srcBuf);
+    const squareBase64 = `data:image/png;base64,${square.toString("base64")}`;
+
+    // Step 3: Edit the square image with OpenAI
+    const b64SquareOut = await Executor.execute(refinedPrompt, squareBase64);
     
-    // Step 3: Resize generated image to match target dimensions exactly
-    const generatedBuffer = Buffer.from(b64, 'base64');
-    
-    // Use 'cover' to fill frame while preserving aspect ratio (crops edges if needed)
-    // This maintains scale alignment for before/after comparison
-    const resizedBuffer = await sharp(generatedBuffer)
-      .resize(targetWidth, targetHeight, {
-        fit: 'cover', // Fill frame, crop edges to preserve aspect ratio
-        kernel: 'lanczos3', // High-quality resizing
-        position: 'centre' // Center the crop
-      })
-      .png()
-      .toBuffer();
-    
-    const resizedBase64 = resizedBuffer.toString('base64');
+    // Step 4: Unpad to restore exact original dimensions (no cropping or distortion)
+    const finalBuf = await unpadFromSquare(b64SquareOut, pad);
+    const finalB64 = finalBuf.toString('base64');
     
     return {
-      imageUrl: `data:image/png;base64,${resizedBase64}`,
+      imageUrl: `data:image/png;base64,${finalB64}`,
       refinedPrompt
     };
   } catch (error) {

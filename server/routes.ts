@@ -183,9 +183,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
+      // Get edit to find associated images
+      const edit = await storage.getEdit(id);
+      if (!edit) {
+        return res.status(404).json({ message: "Edit not found" });
+      }
+
+      // Delete associated image files
+      const imageIds = new Set<string>();
+      if (edit.originalImageId) imageIds.add(edit.originalImageId);
+      if (edit.currentImageId && edit.currentImageId !== edit.originalImageId) {
+        imageIds.add(edit.currentImageId);
+      }
+
+      // Delete all associated image files
+      for (const imageId of Array.from(imageIds)) {
+        try {
+          ImageStorage.deleteImage(imageId);
+        } catch (e) {
+          console.error(`Failed to delete image ${imageId}:`, e);
+          // Continue even if image deletion fails
+        }
+      }
+
+      // Delete the edit record from database
       await storage.deleteEdit(id);
       res.json({ message: "Deleted successfully" });
     } catch (error) {
+      console.error("Delete error:", error);
       res.status(500).json({ message: "Failed to delete" });
     }
   });

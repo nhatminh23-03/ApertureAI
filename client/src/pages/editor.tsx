@@ -273,7 +273,7 @@ export default function Editor() {
         {/* Left Panel: Image Preview */}
         <div className="lg:col-span-8 h-full relative rounded-3xl overflow-hidden border border-white/20 shadow-2xl bg-black/5 dark:bg-white/5">
           <AnimatePresence mode="wait">
-            {step === "processing" ? (
+            {(step === "processing" || isRegenerating) ? (
               <motion.div 
                 initial={{ opacity: 0 }} 
                 animate={{ opacity: 1 }} 
@@ -281,8 +281,12 @@ export default function Editor() {
                 className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm z-50 text-white"
               >
                 <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
-                <p className="text-lg font-medium animate-pulse">Magic is happening...</p>
-                <p className="text-sm text-white/50 mt-2">Generating new version with AI...</p>
+                <p className="text-lg font-medium animate-pulse">
+                  {isRegenerating ? "Adjusting effect strength..." : "Magic is happening..."}
+                </p>
+                <p className="text-sm text-white/50 mt-2">
+                  {isRegenerating ? "Regenerating with new strength..." : "Generating new version with AI..."}
+                </p>
               </motion.div>
             ) : null}
           </AnimatePresence>
