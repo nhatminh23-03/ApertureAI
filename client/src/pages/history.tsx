@@ -25,6 +25,21 @@ export default function History() {
     queryKey: ["/api/history"]
   });
 
+  const handleDownload = (item: Edit, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const link = document.createElement("a");
+      link.href = `/api/data/${item.currentImageId}.png`;
+      link.download = `${item.title || item.prompt || "aperture-edit"}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "Download started" });
+    } catch (error) {
+      toast({ title: "Download failed", variant: "destructive" });
+    }
+  };
+
   const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -66,7 +81,7 @@ export default function History() {
               <GlassCard 
                 key={item.id} 
                 className="p-0 overflow-hidden group flex flex-col h-full cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
-                onClick={() => setLocation(`/editor?id=${item.id}`)}
+                onClick={() => setLocation(`/editor?id=${item.id}&fromHistory=1`)}
               >
                 <div className="aspect-[4/3] relative overflow-hidden bg-black/5">
                   <img 
@@ -82,7 +97,7 @@ export default function History() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => handleDownload(item, e)}>
                           <Download className="w-4 h-4 mr-2" /> Download
                         </DropdownMenuItem>
                         <DropdownMenuItem>

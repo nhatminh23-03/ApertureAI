@@ -36,10 +36,10 @@ export default function Home() {
     onSuccess: (data: any) => {
       setLocation(`/editor?id=${data.id}`);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Upload failed",
-        description: "Please try again with a smaller image.",
+        description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
     }
@@ -48,10 +48,11 @@ export default function Home() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit client-side check
+      // Check if file is larger than 50MB (matching server limit)
+      if (file.size > 50 * 1024 * 1024) { 
         toast({
           title: "File too large",
-          description: "Please upload an image smaller than 5MB",
+          description: "Please upload an image smaller than 50MB",
           variant: "destructive"
         });
         return;
@@ -85,7 +86,7 @@ export default function Home() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto"
           >
-            Describe the edits you want in natural language, and let Aperture AI handle the rest. Simple, powerful, and beautiful.
+            Describe the edits you want, and let Aperture AI handle the rest. Simple, powerful, and beautiful.
           </motion.p>
 
           <motion.div 
@@ -133,7 +134,7 @@ export default function Home() {
               onClick={() => fileInputRef.current?.click()}
             >
               <img 
-                src="https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=800&auto=format&fit=crop&q=60" 
+                src="public/Chicago.jpeg" 
                 alt="Example" 
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               />
@@ -151,7 +152,7 @@ export default function Home() {
               onClick={() => fileInputRef.current?.click()}
             >
               <img 
-                src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=800&auto=format&fit=crop&q=60" 
+                src="public/mammoth-17.jpeg"
                 alt="Example" 
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               />
@@ -169,7 +170,7 @@ export default function Home() {
               onClick={() => fileInputRef.current?.click()}
             >
               <img 
-                src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&auto=format&fit=crop&q=60" 
+                src="public/little.jpeg"
                 alt="Example" 
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               />

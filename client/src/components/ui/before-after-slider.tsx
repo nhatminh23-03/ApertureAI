@@ -72,7 +72,7 @@ export function BeforeAfterSlider({
       data-testid="before-after-slider"
     >
       {/* Before Image (Original) */}
-      <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+      <div className="absolute inset-0 flex items-center justify-center bg-black">
         <div className="absolute top-4 left-4 px-3 py-1 bg-black/60 text-white text-xs rounded-full backdrop-blur-md z-10">
           Original
         </div>
@@ -87,7 +87,7 @@ export function BeforeAfterSlider({
 
       {/* After Image (Edited) - with clip path */}
       <div 
-        className="absolute inset-0 flex items-center justify-center bg-black/90"
+        className="absolute inset-0 flex items-center justify-center bg-black"
         style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
       >
         <div className="absolute top-4 right-4 px-3 py-1 bg-primary/90 text-white text-xs rounded-full backdrop-blur-md z-10">

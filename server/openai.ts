@@ -13,6 +13,90 @@ const openai = new OpenAI({
 // Padding info for square letterboxing
 type PadInfo = { S: number; left: number; top: number; width: number; height: number };
 
+// Sharp image processing parameters
+export type SharpParams = {
+  brightness: number;  // -50 to 50
+  contrast: number;    // -50 to 50
+  saturation: number;  // -50 to 50
+  hue: number;         // -180 to 180
+  sharpen: number;     // 0 to 10
+  noise: number;       // 0 to 100 (noise reduction)
+};
+
+// Optimize image for OpenAI APIs (downscale + compress)
+// This dramatically reduces upload time and avoids file size limits
+async function optimizeImageForAPI(base64Image: string, options: { 
+  maxDimension?: number; 
+  quality?: number;
+  format?: 'jpeg' | 'png';
+  label?: string;
+} = {}): Promise<string> {
+  const { 
+    maxDimension = 1024, 
+    quality = 85, 
+    format = 'jpeg',
+    label = 'Optimize'
+  } = options;
+  
+  try {
+    // Extract base64 data
+    const matches = base64Image.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!matches) return base64Image; // Return as-is if format is unexpected
+    
+    const base64Data = matches[2];
+    const inputBuffer = Buffer.from(base64Data, "base64");
+    
+    // Get original size for logging
+    const originalSize = inputBuffer.length;
+    
+    // Resize and compress
+    let pipeline = sharp(inputBuffer).resize(maxDimension, maxDimension, { 
+      fit: "inside", 
+      withoutEnlargement: true 
+    });
+    
+    let optimizedBuffer: Buffer;
+    let mimeType: string;
+    
+    if (format === 'png') {
+      optimizedBuffer = await pipeline.png({ compressionLevel: 9 }).toBuffer();
+      mimeType = 'image/png';
+    } else {
+      optimizedBuffer = await pipeline.jpeg({ quality }).toBuffer();
+      mimeType = 'image/jpeg';
+    }
+    
+    const optimizedSize = optimizedBuffer.length;
+    const reduction = ((1 - optimizedSize / originalSize) * 100).toFixed(1);
+    console.log(`[${label}] ${(originalSize / 1024 / 1024).toFixed(2)}MB → ${(optimizedSize / 1024).toFixed(0)}KB (${reduction}% smaller)`);
+    
+    return `data:${mimeType};base64,${optimizedBuffer.toString("base64")}`;
+  } catch (error) {
+    console.error(`[${label}] Failed to optimize, using original:`, error);
+    return base64Image;
+  }
+}
+
+// Shorthand for Vision API optimization
+async function optimizeForVision(base64Image: string): Promise<string> {
+  return optimizeImageForAPI(base64Image, { 
+    maxDimension: 1024, 
+    quality: 85, 
+    format: 'jpeg',
+    label: 'VisionOptimize' 
+  });
+}
+
+// Shorthand for DALL-E API optimization (needs PNG for transparency support)
+async function optimizeForDALLE(base64Image: string): Promise<string> {
+  return optimizeImageForAPI(base64Image, { 
+    maxDimension: 1024, 
+    quality: 90, 
+    format: 'png',
+    label: 'DALLEOptimize' 
+  });
+}
+
 // Pad image to square (transparent) before sending to OpenAI
 async function padToSquare(buf: Buffer): Promise<{ square: Buffer; pad: PadInfo }> {
   const meta = await sharp(buf).metadata();
@@ -37,8 +121,16 @@ async function padToSquare(buf: Buffer): Promise<{ square: Buffer; pad: PadInfo 
 
 // After OpenAI returns 1024x1024, scale back to S×S and crop out padding
 async function unpadFromSquare(returnedSquareB64: string, pad: PadInfo): Promise<Buffer> {
+  // returnedSquareB64 is raw base64 (no data: prefix)
   const squareBuf = Buffer.from(returnedSquareB64, "base64");
+  // First, get the actual dimensions of the returned image
+  const metadata = await sharp(squareBuf).metadata();
+  const actualSize = metadata.width || 1024;
+  
+  // Scale to the target square size (pad.S)
   const scaled = await sharp(squareBuf).resize(pad.S, pad.S).toBuffer();
+  
+  // Crop out the padding to restore original dimensions
   const cropped = await sharp(scaled)
     .extract({ left: pad.left, top: pad.top, width: pad.width, height: pad.height })
     .toBuffer();
@@ -65,11 +157,18 @@ export async function ensureBase64(imageUrl: string): Promise<string> {
 
 // Role 1: Vision Analyst - Analyzes the image content
 class VisionAnalyst {
-  static async analyze(base64Image: string): Promise<{ title: string; suggestions: string[] }> {
+  static async analyze(base64Image: string): Promise<{ 
+    title: string; 
+    naturalSuggestions: Array<{ label: string; params: SharpParams }>;
+    aiSuggestions: string[] 
+  }> {
     console.log("[VisionAnalyst] Analyzing image...");
     
+    // Optimize image for faster upload to GPT-4o Vision
+    const optimizedImage = await optimizeForVision(base64Image);
+    
     // Log the start of the base64 string to debug MIME type issues
-    const prefix = base64Image.substring(0, 50);
+    const prefix = optimizedImage.substring(0, 50);
     console.log(`[VisionAnalyst] Image prefix: ${prefix}...`);
 
     try {
@@ -78,36 +177,69 @@ class VisionAnalyst {
         messages: [
           {
             role: "system",
-            content: `You are a Vision Analyst AI. Analyze the image provided and suggest 4-5 creative edit prompts that a user might want to apply to this image. Also, provide a short, descriptive title for the image.
-            
-            Output strictly valid JSON:
-            {
-              "title": "A short descriptive title",
-              "suggestions": ["suggestion 1", "suggestion 2", "suggestion 3", "suggestion 4"]
-            }`
+            content: `You are a professional photo analyst. Analyze the image and return JSON with:
+1. title: concise image title (max 6 words)
+2. naturalSuggestions: array of 6 photo adjustments with numeric Sharp parameters
+   - The FIRST suggestion MUST be labeled "Auto Enhance" and contain the optimal combination of brightness, contrast, saturation, sharpness, etc. to make the photo look its best.
+   - The other 5 suggestions should be specific granular adjustments (e.g. "brighten shadows", "boost vibrancy").
+3. aiSuggestions: array of 5 creative AI remix ideas
+
+CRITICAL INSTRUCTIONS:
+- Analyze brightness: is image dark (-30 to -50), normal (0), or bright (+30 to +50)?
+- Analyze contrast: is image flat (add +20 to +30) or already contrasty (0)?
+- Analyze saturation: is image muted (add +10 to +20) or vibrant (0)?
+- Analyze sharpness: is image soft (sharpen 3-6) or sharp (0)?
+- Analyze noise: is image grainy (noise 20-40) or clean (0)?
+
+RETURN NON-ZERO VALUES FOR ACTUAL IMPROVEMENTS. Do not return all zeros.
+
+Example for dark image:
+{ 
+  "title": "Dark Forest",
+  "naturalSuggestions": [
+    { "label": "Auto Enhance", "params": { "brightness": 35, "contrast": 15, "saturation": 0, "hue": 0, "sharpen": 2, "noise": 10 } },
+    { "label": "brighten shadows", "params": { "brightness": 35, "contrast": 15, "saturation": 0, "hue": 0, "sharpen": 0, "noise": 0 } },
+    ...
+  ],
+  "aiSuggestions": ...
+}
+
+Example for flat image:
+{ "label": "add contrast", "params": { "brightness": 0, "contrast": 25, "saturation": 10, "hue": 0, "sharpen": 0, "noise": 0 } }
+
+Return valid JSON only, no other text.`
           },
           {
             role: "user",
             content: [
-              { type: "text", text: "Analyze this image." },
-              { type: "image_url", image_url: { url: base64Image } }
+              { type: "text", text: "Analyze this image and provide suggestions with Sharp parameters." },
+              { type: "image_url", image_url: { url: optimizedImage } }
             ],
           },
         ],
         response_format: { type: "json_object" },
-        max_completion_tokens: 1024,
+        max_completion_tokens: 2048,
       });
 
       const content = response.choices[0].message.content;
       if (!content) throw new Error("No content in response");
       
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      console.log("[VisionAnalyst] Raw response:", JSON.stringify(parsed, null, 2));
+      return parsed;
     } catch (error) {
       console.error("[VisionAnalyst] Error:", error);
       // Fallback for MVP if Vision fails
       return {
         title: "Uploaded Image",
-        suggestions: ["Enhance colors", "Make it cinematic", "Remove background", "Convert to B&W"]
+        naturalSuggestions: [
+          { label: "add brightness", params: { brightness: 15, contrast: 0, saturation: 0, hue: 0, sharpen: 0, noise: 0 } },
+          { label: "increase contrast", params: { brightness: 0, contrast: 20, saturation: 0, hue: 0, sharpen: 0, noise: 0 } },
+          { label: "balance color", params: { brightness: 0, contrast: 0, saturation: 10, hue: 0, sharpen: 0, noise: 0 } },
+          { label: "reduce noise", params: { brightness: 0, contrast: 0, saturation: 0, hue: 0, sharpen: 0, noise: 5 } },
+          { label: "sharpen slightly", params: { brightness: 0, contrast: 0, saturation: 0, hue: 0, sharpen: 2, noise: 0 } }
+        ],
+        aiSuggestions: ["golden hour relight", "cinematic teal-orange", "dramatic sky", "soft portrait glow", "moody film look"]
       };
     }
   }
@@ -117,6 +249,10 @@ class VisionAnalyst {
 class PromptEngineer {
   static async refine(userPrompt: string, base64Image: string): Promise<string> {
     console.log("[PromptEngineer] Refinining prompt...");
+    
+    // Optimize image for analysis
+    const optimizedImage = await optimizeForVision(base64Image);
+    
     const response = await openai.chat.completions.create({
       model: "gpt-4o", // Switched to gpt-4o for better reliability with vision tasks
       messages: [
@@ -167,8 +303,11 @@ class Executor {
   static async execute(prompt: string, base64Image: string): Promise<string> {
     console.log("[Executor] Editing image...");
     
+    // Optimize image for DALL-E (max 50MB limit, we target much smaller)
+    const optimizedImage = await optimizeForDALLE(base64Image);
+    
     // Convert base64 to a temporary file because openai.images.edit requires a File-like object
-    const matches = base64Image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+    const matches = optimizedImage.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
     if (!matches) throw new Error("Invalid base64 image format");
     
     const mimeType = matches[1];
@@ -220,10 +359,236 @@ class Executor {
   }
 }
 
+// Sharp image processor for Natural Edit
+export async function applySharpParams(base64Image: string, params: SharpParams, targetWidth: number, targetHeight: number): Promise<string> {
+  try {
+    console.log("[SharpProcessor] Applying params:", JSON.stringify(params));
+    console.log("[SharpProcessor] Target dimensions:", targetWidth, "x", targetHeight);
+    
+    // Extract base64 data and original MIME type
+    const matches = base64Image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+    if (!matches) throw new Error("Invalid base64 image format");
+    
+    const originalMimeType = matches[1];
+    const data = matches[2];
+    const buffer = Buffer.from(data, "base64");
+    
+    const inputSize = buffer.length;
+    console.log("[SharpProcessor] Input size:", (inputSize / 1024 / 1024).toFixed(2), "MB, format:", originalMimeType);
+    
+    let pipeline = sharp(buffer);
+    
+    // Apply modulate for brightness, saturation, hue
+    const modulateOptions: any = {};
+    if (params.brightness !== 0) {
+      modulateOptions.brightness = 1 + (params.brightness / 100); // Convert -50..50 to 0.5..1.5
+    }
+    if (params.saturation !== 0) {
+      modulateOptions.saturation = 1 + (params.saturation / 100); // Convert -50..50 to 0.5..1.5
+    }
+    if (params.hue !== 0) {
+      modulateOptions.hue = params.hue; // -180..180
+    }
+    
+    if (Object.keys(modulateOptions).length > 0) {
+      pipeline = pipeline.modulate(modulateOptions);
+    }
+    
+    // Apply contrast
+    if (params.contrast !== 0) {
+      pipeline = pipeline.linear(1 + (params.contrast / 100), 0); // Convert -50..50 to 0.5..1.5
+    }
+    
+    // Apply sharpen
+    if (params.sharpen > 0) {
+      pipeline = pipeline.sharpen({ sigma: params.sharpen / 2 }); // 0..10 -> 0..5 sigma
+    }
+    
+    // Apply noise reduction (using median filter as approximation)
+    if (params.noise > 0) {
+      // Use median filter for noise reduction
+      pipeline = pipeline.median(Math.ceil(params.noise / 20)); // 0..100 -> 0..5 radius
+    }
+    
+    // Preserve original format and apply compression
+    // This prevents a 3MB JPEG from becoming a 70MB PNG
+    let processed: Buffer;
+    let outputMimeType: string;
+    
+    if (originalMimeType === "image/jpeg" || originalMimeType === "image/jpg") {
+      // Output as JPEG with good quality (90%)
+      processed = await pipeline.jpeg({ quality: 90 }).toBuffer();
+      outputMimeType = "image/jpeg";
+    } else if (originalMimeType === "image/webp") {
+      // Output as WebP with good quality
+      processed = await pipeline.webp({ quality: 90 }).toBuffer();
+      outputMimeType = "image/webp";
+    } else {
+      // Default to PNG with compression for other formats
+      processed = await pipeline.png({ compressionLevel: 9 }).toBuffer();
+      outputMimeType = "image/png";
+    }
+    
+    const outputSize = processed.length;
+    console.log("[SharpProcessor] Output size:", (outputSize / 1024 / 1024).toFixed(2), "MB, format:", outputMimeType);
+    
+    return `data:${outputMimeType};base64,${processed.toString("base64")}`;
+  } catch (error) {
+    console.error("[SharpProcessor] Error:", error);
+    throw error;
+  }
+}
+
 // Main exported functions that orchestrate the roles
-export async function analyzeImage(imageUrl: string): Promise<{ title: string; suggestions: string[] }> {
+export async function analyzeImage(imageUrl: string): Promise<{ title: string; naturalSuggestions: Array<{ label: string; params: SharpParams }>; aiSuggestions: string[] }> {
   const base64Image = await ensureBase64(imageUrl);
   return await VisionAnalyst.analyze(base64Image);
+}
+
+// Helper: given a natural-language prompt for Natural Edit, return a single SharpParams object
+// that best matches the requested adjustments for the given image.
+export async function analyzePromptToSharpParams(
+  base64Image: string,
+  userPrompt: string,
+  selectedLabels?: string[]
+): Promise<SharpParams> {
+  console.log("[PromptToSharp] Analyzing prompt for Natural Edit...", { userPrompt, selectedLabels });
+
+  // Optimize image for analysis to prevent timeouts/errors with large files
+  const optimizedImage = await optimizeForVision(base64Image);
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are a configuration engine for the Sharp image processing library.
+Input: An image and a text description of a desired visual adjustment.
+Output: A JSON object containing numeric values for brightness, contrast, saturation, hue, sharpen, and noise.
+
+The user is NOT asking you to edit the image.
+The user is asking for the NUMERIC CONFIGURATION to be applied by a separate software tool.
+Analyze the image to determine the appropriate magnitude of adjustments.
+
+Output a SINGLE JSON object with these integer fields:
+{
+  "params": {
+    "brightness": number,   // -50 to 50
+    "contrast": number,     // -50 to 50
+    "saturation": number,   // -50 to 50
+    "hue": number,          // -180 to 180
+    "sharpen": number,      // 0 to 10
+    "noise": number         // 0 to 100 (noise reduction)
+  }
+}
+
+Return ONLY valid JSON, no extra text.`
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Calculate configuration for request: "${userPrompt}".
+Context suggestions: ${selectedLabels && selectedLabels.length ? selectedLabels.join(", ") : "none"}.`
+            },
+            { type: "image_url", image_url: { url: optimizedImage } }
+          ]
+        }
+      ],
+      response_format: { type: "json_object" },
+      max_completion_tokens: 512
+    });
+
+    // Check for refusal
+    if (response.choices[0].message.refusal) {
+      console.warn("[PromptToSharp] Request refused by model. Falling back to text-only estimation.", response.choices[0].message.refusal);
+      throw new Error("Model refused request");
+    }
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      console.error("[PromptToSharp] Response content is empty:", JSON.stringify(response, null, 2));
+      throw new Error("No content in PromptToSharp response");
+    }
+
+    const parsed = JSON.parse(content as string);
+    const raw = parsed.params ?? parsed;
+
+    const params: SharpParams = {
+      brightness: Number(raw.brightness) || 0,
+      contrast: Number(raw.contrast) || 0,
+      saturation: Number(raw.saturation) || 0,
+      hue: Number(raw.hue) || 0,
+      sharpen: Number(raw.sharpen) || 0,
+      noise: Number(raw.noise) || 0
+    };
+
+    console.log("[PromptToSharp] Parsed params:", params);
+    return params;
+  } catch (error) {
+    console.error("[PromptToSharp] Vision Error:", error);
+    
+    // Fallback: Text-only analysis (no image)
+    // This avoids refusals related to image processing restrictions
+    try {
+      console.log("[PromptToSharp] Attempting text-only fallback...");
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `You are a configuration engine for the Sharp image processing library.
+Convert the user's text request into numeric parameters.
+
+Output JSON:
+{
+  "params": {
+    "brightness": number,   // -50 to 50
+    "contrast": number,     // -50 to 50
+    "saturation": number,   // -50 to 50
+    "hue": number,          // -180 to 180
+    "sharpen": number,      // 0 to 10
+    "noise": number         // 0 to 100 (noise reduction)
+  }
+}`
+          },
+          {
+            role: "user",
+            content: `Request: "${userPrompt}". Suggestions: ${selectedLabels?.join(", ")}`
+          }
+        ],
+        response_format: { type: "json_object" }
+      });
+      
+      const content = response.choices[0].message.content;
+      if (content) {
+        const parsed = JSON.parse(content);
+        const raw = parsed.params ?? parsed;
+        return {
+          brightness: Number(raw.brightness) || 0,
+          contrast: Number(raw.contrast) || 0,
+          saturation: Number(raw.saturation) || 0,
+          hue: Number(raw.hue) || 0,
+          sharpen: Number(raw.sharpen) || 0,
+          noise: Number(raw.noise) || 0
+        };
+      }
+    } catch (fallbackError) {
+      console.error("[PromptToSharp] Fallback Error:", fallbackError);
+    }
+
+    // Ultimate fallback: safe defaults
+    return {
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
+      hue: 0,
+      sharpen: 0,
+      noise: 0
+    };
+  }
 }
 
 export async function generateImage(userPrompt: string, originalImageUrl: string): Promise<{ imageUrl: string; refinedPrompt: string }> {
@@ -266,15 +631,12 @@ export async function generateImageWithStrength(
   try {
     const sourceImageBase64 = await ensureBase64(sourceImageUrl);
 
-    // Step 1: Refine Prompt with effect strength context
+    // Step 1: Refine Prompt (same prompt regardless of strength)
+    // The strength only affects blending, not the prompt itself
     let refinedPrompt = userPrompt;
     try {
-      // Adjust prompt based on effect strength
-      const strengthDescription = effectStrength < 0.3 ? "subtle" : effectStrength < 0.7 ? "moderate" : "strong";
-      const promptWithStrength = `Apply a ${strengthDescription} edit: ${userPrompt}`;
-      
-      refinedPrompt = await PromptEngineer.refine(promptWithStrength, sourceImageBase64);
-      console.log(`Refined Prompt (strength ${effectStrength}):`, refinedPrompt);
+      refinedPrompt = await PromptEngineer.refine(userPrompt, sourceImageBase64);
+      console.log(`Refined Prompt:`, refinedPrompt);
     } catch (e) {
       console.error("[GenerateWithStrength] Prompt refinement failed:", e);
       refinedPrompt = userPrompt; // Fallback to original prompt

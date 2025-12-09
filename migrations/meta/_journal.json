@@ -8,6 +8,34 @@
       "when": 1763677069227,
       "tag": "0000_lazy_spirit",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1700000000000,
+      "tag": "0001_add_strength_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1763931846794,
+      "tag": "0002_mysterious_scarlet_spider",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1764992024568,
+      "tag": "0003_add_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1764993639830,
+      "tag": "0004_add_google_auth",
+      "breakpoints": true
     }
   ]
 }
