@@ -134,7 +134,7 @@ export default function Home() {
               onClick={() => fileInputRef.current?.click()}
             >
               <img 
-                src="public/Chicago.jpeg" 
+                src="https://images.unsplash.com/photo-1765324149015-26ef84027bc5?q=80&w=1740&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" 
                 alt="Example" 
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               />
@@ -152,7 +152,7 @@ export default function Home() {
               onClick={() => fileInputRef.current?.click()}
             >
               <img 
-                src="public/mammoth-17.jpeg"
+                src="https://images.unsplash.com/photo-1765324149023-4bb6b7189b89?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
                 alt="Example" 
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               />
@@ -170,7 +170,7 @@ export default function Home() {
               onClick={() => fileInputRef.current?.click()}
             >
               <img 
-                src="public/little.jpeg"
+                src="https://images.unsplash.com/photo-1765324149020-e2e1163e75f2?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
                 alt="Example" 
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
               />
