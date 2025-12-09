@@ -247,18 +247,6 @@ For deployment instructions, see [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIS
 
 For Google OAuth setup details, see [GOOGLE_OAUTH_READY.md](./GOOGLE_OAUTH_READY.md)
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
-
-## 📧 Support
-
-For issues and questions, please open an issue on GitHub.
-
 ## 🙏 Acknowledgments
 
 - [OpenAI](https://openai.com) - GPT-4 Vision and DALL-E 3
