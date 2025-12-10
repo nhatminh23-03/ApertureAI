@@ -1,5 +1,6 @@
 # Aperture AI
 
+Link: https://apertureai.onrender.com/
 > AI-Powered Photo Editing Application - Transform your photos with natural language prompts
 
 A modern, full-stack web application that enables users to upload photos and apply AI-powered edits using natural language prompts. Built with React, Express, TypeScript, and OpenAI's GPT-4 Vision and DALL-E models.
@@ -240,12 +241,6 @@ aperture-editor/
 - **Toast Notifications** - User feedback system
 - **Glassmorphism** - Modern glass effect design
 - **Gradient Accents** - Teal and royal blue gradients
-
-## 🚀 Deployment
-
-For deployment instructions, see [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
-
-For Google OAuth setup details, see [GOOGLE_OAUTH_READY.md](./GOOGLE_OAUTH_READY.md)
 
 ## 🙏 Acknowledgments
 
