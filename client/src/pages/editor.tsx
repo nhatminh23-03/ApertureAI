@@ -338,6 +338,7 @@ export default function Editor() {
           
           if (data.status === "completed") {
             clearInterval(interval);
+            console.log("[GenerateMutation] Completion detected, transitioning to preview");
             // Immediately hide loading and show preview
             setIsRegenerating(false);
             setStep("preview");
@@ -350,6 +351,7 @@ export default function Editor() {
             }
           } else if (data.status === "failed") {
             clearInterval(interval);
+            console.log("[GenerateMutation] Generation failed");
             setIsRegenerating(false);
             setStep("prompt");
             toast({
@@ -359,6 +361,7 @@ export default function Editor() {
             });
           } else if (Date.now() - start > 45000) {
             clearInterval(interval);
+            console.log("[GenerateMutation] Polling timeout after 45s");
             setIsRegenerating(false);
             setStep("prompt");
             toast({
@@ -368,7 +371,7 @@ export default function Editor() {
             });
           }
         } catch (error) {
-          console.error("Polling error:", error);
+          console.error("[GenerateMutation] Polling error:", error);
           clearInterval(interval);
           setIsRegenerating(false);
         }
