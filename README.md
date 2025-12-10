@@ -1,7 +1,5 @@
 # Aperture AI 
 
-<a href="[https://example.com](https://apertureai.onrender.com/)" target="_blank">Click me</a>
-
 > AI-Powered Photo Editing Application - Transform your photos with natural language prompts
 
 A modern, full-stack web application that enables users to upload photos and apply AI-powered edits using natural language prompts. Built with React, Express, TypeScript, and OpenAI's GPT-4 Vision and DALL-E models.
