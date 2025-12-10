@@ -3,10 +3,12 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Express } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User } from "@shared/schema";
+import { pool } from "./db";
 
 const scryptAsync = promisify(scrypt);
 
@@ -24,13 +26,19 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
+  const PgSession = connectPgSimple(session);
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || "aperture_editor_secret_key",
     resave: false,
     saveUninitialized: false,
-    store: undefined,
+    store: new PgSession({
+      pool,
+      createTableIfMissing: true,
+      tableName: "session",
+    }),
     cookie: {
       secure: app.get("env") === "production",
+      sameSite: "lax",
     },
   };
 

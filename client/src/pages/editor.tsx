@@ -251,7 +251,7 @@ export default function Editor() {
         generateAISuggestions();
       }
 
-      // Poll for completion
+      // Poll for completion (reduce churn on server)
       const interval = setInterval(async () => {
         try {
           const res = await fetch(`/api/edits/${id}`);
@@ -281,7 +281,7 @@ export default function Editor() {
         } catch (error) {
           console.error("Polling error:", error);
         }
-      }, 500);
+      }, 1500);
     },
     onError: () => {
       toast({
@@ -317,7 +317,7 @@ export default function Editor() {
       }
     },
     onSuccess: () => {
-      // Poll for completion with faster interval
+      // Poll for completion with reduced frequency to avoid overwhelming small servers
       const interval = setInterval(async () => {
         try {
           const res = await fetch(`/api/edits/${id}`);
@@ -348,7 +348,7 @@ export default function Editor() {
         } catch (error) {
           console.error("Polling error:", error);
         }
-      }, 500); // Faster polling interval for quicker UI updates
+      }, 1500);
     },
     onError: () => {
        setIsRegenerating(false);
