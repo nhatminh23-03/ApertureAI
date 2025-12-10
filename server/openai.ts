@@ -335,15 +335,28 @@ class Executor {
         prompt: prompt.substring(0, 4000),
         n: 1,
         size: "1024x1024",
-        response_format: "b64_json", // Force base64 to avoid URL fetching
       });
 
-      if (!response.data || !response.data[0].b64_json) {
-        throw new Error("No image generated or no base64 data");
+      if (!response.data || (!response.data[0].b64_json && !response.data[0].url)) {
+        throw new Error("No image generated");
       }
 
-      // Return base64 directly (no URL fetching to save memory)
-      return response.data[0].b64_json;
+      // Prefer base64 if available (less memory overhead), otherwise fetch URL
+      if (response.data[0].b64_json) {
+        return response.data[0].b64_json;
+      } else if (response.data[0].url) {
+        // Fetch URL and convert to base64 (unavoidable for this endpoint)
+        console.log("[Executor] Fetching image from URL...");
+        const urlResponse = await fetch(response.data[0].url);
+        if (!urlResponse.ok) {
+          throw new Error(`Failed to fetch image: ${urlResponse.statusText}`);
+        }
+        const arrayBuffer = await urlResponse.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        return base64;
+      }
+      
+      throw new Error("Failed to retrieve image data");
     } finally {
       // Clean up temp files
       if (fs.existsSync(tempFilePath)) {
