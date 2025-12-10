@@ -1,4 +1,4 @@
-# Aperture AI
+# Aperture AI 
 
 Link: https://apertureai.onrender.com/
 > AI-Powered Photo Editing Application - Transform your photos with natural language prompts
