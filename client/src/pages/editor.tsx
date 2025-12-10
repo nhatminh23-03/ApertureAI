@@ -251,7 +251,8 @@ export default function Editor() {
         generateAISuggestions();
       }
 
-      // Poll for completion (reduce churn on server)
+      // Poll for completion (reduce churn on server, stop after 45s)
+      const start = Date.now();
       const interval = setInterval(async () => {
         try {
           const res = await fetch(`/api/edits/${id}`);
@@ -277,9 +278,20 @@ export default function Editor() {
               description: "Failed to apply natural edit",
               variant: "destructive"
             });
+          } else if (Date.now() - start > 45000) {
+            // Timeout to prevent endless polling on tiny instances / restarts
+            clearInterval(interval);
+            setIsRegenerating(false);
+            toast({
+              title: "Still processing",
+              description: "This edit is taking longer than expected. Please try again.",
+              variant: "destructive"
+            });
           }
         } catch (error) {
           console.error("Polling error:", error);
+          clearInterval(interval);
+          setIsRegenerating(false);
         }
       }, 1500);
     },
@@ -318,6 +330,7 @@ export default function Editor() {
     },
     onSuccess: () => {
       // Poll for completion with reduced frequency to avoid overwhelming small servers
+      const start = Date.now();
       const interval = setInterval(async () => {
         try {
           const res = await fetch(`/api/edits/${id}`);
@@ -344,9 +357,20 @@ export default function Editor() {
               description: "The AI could not process your request. Please try again.",
               variant: "destructive"
             });
+          } else if (Date.now() - start > 45000) {
+            clearInterval(interval);
+            setIsRegenerating(false);
+            setStep("prompt");
+            toast({
+              title: "Still processing",
+              description: "This generation is taking longer than expected. Please try again.",
+              variant: "destructive"
+            });
           }
         } catch (error) {
           console.error("Polling error:", error);
+          clearInterval(interval);
+          setIsRegenerating(false);
         }
       }, 1500);
     },
