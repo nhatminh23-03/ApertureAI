@@ -561,7 +561,7 @@ export default function Editor() {
         </div>
         
         {step === "preview" && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -569,7 +569,7 @@ export default function Editor() {
               onClick={() => setStep("prompt")}
             >
               <Undo2 className="w-4 h-4" />
-              Undo
+              <span className="hidden sm:inline">Undo</span>
             </Button>
             {editMode === "ai" && (
               <Button
@@ -579,7 +579,7 @@ export default function Editor() {
                 onClick={() => generateMutation.mutate({ clearCache: true })}
               >
                 <RefreshCw className="w-4 h-4" />
-                Regenerate
+                <span className="hidden sm:inline">Regenerate</span>
               </Button>
             )}
             <Button
@@ -599,16 +599,16 @@ export default function Editor() {
               }}
             >
               <Check className="w-4 h-4" />
-              Save & Finish
+              <span className="hidden sm:inline">Save & Finish</span>
             </Button>
           </div>
         )}
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 h-full pb-6">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 h-full pb-6 auto-rows-max lg:auto-rows-auto">
         
         {/* Left Panel: Image Preview */}
-        <div className="lg:col-span-8 h-full relative rounded-3xl overflow-hidden border border-white/20 shadow-2xl bg-black/5 dark:bg-white/5">
+        <div className="lg:col-span-8 h-auto lg:h-full relative rounded-3xl overflow-hidden border border-white/20 shadow-2xl bg-black/5 dark:bg-white/5 min-h-[300px] md:min-h-[400px]">
           <AnimatePresence mode="wait">
             {(step === "processing" || isRegenerating) ? (
               <motion.div 
@@ -647,7 +647,7 @@ export default function Editor() {
         </div>
 
         {/* Right Panel: Controls */}
-        <div className="lg:col-span-4 flex flex-col gap-4 h-full">
+        <div className="lg:col-span-4 flex flex-col gap-4 h-auto lg:h-full">
           <GlassCard className="flex-1 flex flex-col gap-6">
             <div>
               <h2 className="text-xl font-heading font-semibold mb-2">
@@ -1202,22 +1202,24 @@ export default function Editor() {
 
                 {/* Regenerate Mode Toggle */}
                 {edit.status === "completed" && (
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-white/10 mt-auto">
-                    <div className="flex flex-col gap-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-xl bg-muted/30 border border-white/10 mt-auto">
+                    <div className="flex flex-col gap-1 flex-1">
                       <span className="text-xs font-medium">Refine Current Edit</span>
                       <span className="text-xs text-muted-foreground">
                         {refineFromCurrent ? "Uses edited image" : "Uses original image"}
                       </span>
                     </div>
-                    <Switch 
-                      checked={refineFromCurrent}
-                      onCheckedChange={(checked) => {
-                        setRefineFromCurrent(checked);
-                        // Clear selected suggestions when toggling since the suggestions will change
-                        setSelectedNaturalSuggestions(new Set());
-                      }}
-                      data-testid="switch-refine-mode"
-                    />
+                    <div className="shrink-0">
+                      <Switch 
+                        checked={refineFromCurrent}
+                        onCheckedChange={(checked) => {
+                          setRefineFromCurrent(checked);
+                          // Clear selected suggestions when toggling since the suggestions will change
+                          setSelectedNaturalSuggestions(new Set());
+                        }}
+                        data-testid="switch-refine-mode"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

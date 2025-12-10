@@ -60,12 +60,14 @@ export function BeforeAfterSlider({
   return (
     <div 
       ref={containerRef}
-      className={`relative h-full w-full overflow-hidden select-none ${className}`}
+      className={`relative h-full w-full overflow-hidden select-none touch-none ${className}`}
       onMouseDown={(e) => {
+        e.preventDefault();
         handleMove(e.clientX);
         handleMouseDown();
       }}
       onTouchStart={(e) => {
+        e.preventDefault();
         handleMove(e.touches[0].clientX);
         handleMouseDown();
       }}
