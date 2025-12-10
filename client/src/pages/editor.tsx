@@ -338,9 +338,10 @@ export default function Editor() {
           
           if (data.status === "completed") {
             clearInterval(interval);
-            console.log("[GenerateMutation] Completion detected, transitioning to preview");
+            console.log("[GenerateMutation] Completion detected, transitioning to preview", { currentStep: step, isRegenerating });
             // Immediately hide loading and show preview
             setIsRegenerating(false);
+            // Always set to preview, regardless of current step
             setStep("preview");
             // Invalidate query to refresh image
             queryClient.invalidateQueries({ queryKey: [`/api/edits/${id}`] });
