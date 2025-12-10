@@ -323,6 +323,7 @@ class Executor {
     const tempFilePath = path.join(os.tmpdir(), `edit-${Date.now()}.${ext}`);
     fs.writeFileSync(tempFilePath, buffer);
     
+    let outputTempPath: string | null = null;
     try {
       const fileStream = fs.createReadStream(tempFilePath);
       // Pass the contentType explicitly to toFile to ensure OpenAI SDK handles it correctly
@@ -334,26 +335,22 @@ class Executor {
         prompt: prompt.substring(0, 4000),
         n: 1,
         size: "1024x1024",
+        response_format: "b64_json", // Force base64 to avoid URL fetching
       });
 
-      if (!response.data || (!response.data[0].b64_json && !response.data[0].url)) {
-        throw new Error("No image generated");
+      if (!response.data || !response.data[0].b64_json) {
+        throw new Error("No image generated or no base64 data");
       }
 
-      // Return base64 directly if available, otherwise fetch URL and convert
-      if (response.data[0].b64_json) {
-        return response.data[0].b64_json;
-      } else if (response.data[0].url) {
-         const urlResponse = await fetch(response.data[0].url);
-         const arrayBuffer = await urlResponse.arrayBuffer();
-         return Buffer.from(arrayBuffer).toString('base64');
-      }
-      
-      throw new Error("Failed to retrieve image data");
+      // Return base64 directly (no URL fetching to save memory)
+      return response.data[0].b64_json;
     } finally {
-      // Clean up temp file
+      // Clean up temp files
       if (fs.existsSync(tempFilePath)) {
         fs.unlinkSync(tempFilePath);
+      }
+      if (outputTempPath && fs.existsSync(outputTempPath)) {
+        fs.unlinkSync(outputTempPath);
       }
     }
   }

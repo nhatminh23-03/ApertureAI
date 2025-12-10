@@ -490,7 +490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const sourceId = refineFromCurrent ? edit.currentImageId : edit.originalImageId;
         
         // Call execute endpoint internally
-        const sourceImageData = await ImageStorage.loadImage(sourceId);
+        let sourceImageData = await ImageStorage.loadImage(sourceId);
         if (!sourceImageData) {
           throw new Error("Source image not found");
         }
@@ -523,7 +523,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           refinedPromptToUse = result.refinedPrompt;
         }
         
+        // Clear source image from memory to reduce peak usage
+        sourceImageData = "";
+        
         const generatedMeta = await ImageStorage.saveImage(editedImageData);
+        
+        // Clear edited image from memory after saving
+        editedImageData = "";
         
         // Save to strength cache
         await storage.saveCachedImage({
@@ -535,6 +541,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`[Generate] Success for edit ${id}. Updating DB...`);
         await storage.updateEditResult(id, generatedMeta.id, "completed", prompt, refinedPromptToUse, strengthPercent);
         console.log(`[Generate] DB updated for edit ${id} to completed.`);
+        
+        // Hint garbage collection
+        if (global.gc) {
+          global.gc();
+        }
       } catch (e) {
         console.error(`[Generate] Failed for edit ${id}:`, e);
         await storage.updateEditResult(id, edit.currentImageId, "failed");
